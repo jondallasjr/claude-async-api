@@ -1,14 +1,12 @@
 {
-    "version": 2,
-    "builds": [
-      {
-        "src": "api/**/*.js",
-        "use": "@vercel/node"
-      }
-    ],
     "functions": {
       "api/process-queue.js": {
         "maxDuration": 300
       }
+    },
+    "env": {
+      "SUPABASE_URL": "@supabase-url",
+      "SUPABASE_SERVICE_ROLE_KEY": "@supabase-service-role-key",
+      "ANTHROPIC_API_KEY": "@anthropic-api-key"
     }
   }
