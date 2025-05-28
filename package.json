@@ -1,0 +1,20 @@
+{
+  "name": "claude-async-api",
+  "version": "1.0.0",
+  "description": "Async Claude API processing for Coda",
+  "main": "index.js",
+  "scripts": {
+    "dev": "vercel dev",
+    "build": "echo 'No build step needed'",
+    "start": "vercel dev"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.49.8"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.51"
+  },
+  "engines": {
+    "node": "18.x"
+  }
+}
