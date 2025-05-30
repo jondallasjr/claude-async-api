@@ -5,14 +5,13 @@
 CRITICAL LESSON: Coda Pack authentication truncates user API keys from 108→24 chars.
 
 PROBLEM SOLVED:
-- User Claude API keys were getting truncated in Coda Pack authentication (108→24 chars)  
-- Root cause: Coda's security design prevents direct access to user credentials
-- Solution: Use parameter-based authentication instead of Coda's auth system
+- User Claude API keys were getting truncated in Pack authentication
+- Expected: sk-ant-api03-*****************-TLsQqwp8AktN3qUy_tUAW3Sl-TBw-wVaVDAAA (108 chars)
+- Received: BdoveNwSkOfb58rCtsAwgcR2 (24 chars)
 
 CURRENT SOLUTION:
-- Users pass Claude API key directly as formula parameter (claudeApiKey)
-- Pack sends real API key in request payload as userApiKey
-- No more truncation - full sk-ant-api03-... keys work perfectly
+- Force system API key usage: const apiKey = process.env.ANTHROPIC_API_KEY
+- Bypasses Pack auth issues until root cause is resolved
 
 IMPROVED STATUS HANDLING:
 - Handles already completed/failed requests gracefully
@@ -139,6 +138,7 @@ export default async function handler(req, res) {
 
 // This function contains your EXACT existing Claude API logic
 async function callClaudeAPI(payload) {
+  // Extract what we need from the payload
   const { 
     prompt, 
     model = 'claude-sonnet-4-0',
@@ -148,22 +148,19 @@ async function callClaudeAPI(payload) {
     jsonMode = false,
     extendedThinking = false,
     thinkingBudgetTokens = 4096,
-    userApiKey // This should match what the Pack sends (claudeApiKey → userApiKey)
+    userApiKey
   } = payload;
 
-  // Use the user's Claude API key directly
-  const apiKey = userApiKey; // Direct from Pack parameter (claudeApiKey)
+  // FIXED: Always use system API key until Pack authentication is fixed
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  
+  // Debug logging
+  console.log(`User API key received: ${userApiKey} (length: ${userApiKey?.length})`);
+  console.log(`Using system API key: ${apiKey?.substring(0, 20)}... (length: ${apiKey?.length})`);
   
   if (!apiKey) {
-    throw new Error('No Claude API key provided in request payload');
+    throw new Error('No system API key configured in Vercel environment');
   }
-
-  // Validate Claude API key format with helpful error message
-  if (!apiKey.startsWith('sk-ant-api') || apiKey.length < 100) {
-    throw new Error(`Invalid Claude API key format: expected sk-ant-api... with 100+ characters (get at console.anthropic.com), got ${apiKey.length} characters`);
-  }
-
-  console.log(`Using Claude API key: ${apiKey.substring(0, 20)}... (length: ${apiKey.length})`);
 
   const API_VERSION = "2023-06-01";
   const API_BASE_URL = "https://api.anthropic.com/v1";
