@@ -31,14 +31,43 @@ export default async function handler(req, res) {
       throw new Error(`Request not found: ${requestId}`);
     }
 
-    if (request.status !== 'queued') {
-      return res.status(400).json({ error: `Request not queued` });
+    // IMPROVED: Handle different status scenarios
+    if (request.status === 'completed') {
+      return res.status(200).json({ 
+        success: true, 
+        message: 'Request already completed',
+        status: request.status
+      });
+    }
+
+    if (request.status === 'failed') {
+      return res.status(200).json({ 
+        success: false, 
+        message: 'Request previously failed',
+        error: request.error_message
+      });
+    }
+
+    if (request.status === 'processing') {
+      // Check if it's been processing too long (over 5 minutes)
+      const processingTime = Date.now() - new Date(request.processing_started_at).getTime();
+      if (processingTime < 300000) {
+        return res.status(409).json({ 
+          error: 'Request currently being processed',
+          processingTimeSeconds: Math.round(processingTime / 1000)
+        });
+      }
+      console.log(`Resetting stuck request ${requestId} after ${processingTime}ms`);
     }
 
     // Mark as processing
     await supabase
       .from('llm_requests')
-      .update({ status: 'processing', processing_started_at: new Date().toISOString() })
+      .update({ 
+        status: 'processing', 
+        processing_started_at: new Date().toISOString(),
+        error_message: null // Clear any previous errors
+      })
       .eq('request_id', requestId);
 
     // Extract the original request payload
@@ -94,18 +123,17 @@ async function callClaudeAPI(payload) {
     userApiKey
   } = payload;
 
-  // Use user's API key if provided, otherwise use system key
-  const apiKey = process.env.ANTHROPIC_API_KEY; // Always use system key for now
-console.log(`Using system API key: ${apiKey?.substring(0, 20)}...`);
-
-// Optional: Log the problematic user key for debugging
-if (userApiKey) {
-  console.log(`User API key received: ${userApiKey} (length: ${userApiKey?.length})`);
-}
-
-  // COPY YOUR EXACT makeClaudeRequest FUNCTION HERE
-  // This is identical to your pack code - no changes needed!
+  // FIXED: Always use system API key until Pack authentication is fixed
+  const apiKey = process.env.ANTHROPIC_API_KEY;
   
+  // Debug logging
+  console.log(`User API key received: ${userApiKey} (length: ${userApiKey?.length})`);
+  console.log(`Using system API key: ${apiKey?.substring(0, 20)}... (length: ${apiKey?.length})`);
+  
+  if (!apiKey) {
+    throw new Error('No system API key configured in Vercel environment');
+  }
+
   const API_VERSION = "2023-06-01";
   const API_BASE_URL = "https://api.anthropic.com/v1";
   
