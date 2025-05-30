@@ -48,13 +48,17 @@ export default async function handler(req, res) {
       throw error;
     }
 
-    // Trigger processing
-    const processUrl = `${req.headers.origin || process.env.VERCEL_URL}/api/process-queue`;
+    // FIX: Properly construct the process URL with https://
+    const processUrl = `https://${req.headers.host}/api/process-queue`;
+    console.log(`Triggering processing at: ${processUrl}`);
+    
     fetch(processUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ requestId })
-    }).catch(console.error);
+    }).catch(error => {
+      console.error('Failed to trigger processing:', error);
+    });
 
     res.status(200).json({ 
       success: true, 
