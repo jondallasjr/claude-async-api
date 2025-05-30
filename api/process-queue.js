@@ -95,7 +95,13 @@ async function callClaudeAPI(payload) {
   } = payload;
 
   // Use user's API key if provided, otherwise use system key
-  const apiKey = (userApiKey && userApiKey !== 'system') ? userApiKey : process.env.ANTHROPIC_API_KEY;
+  const apiKey = process.env.ANTHROPIC_API_KEY; // Always use system key for now
+console.log(`Using system API key: ${apiKey?.substring(0, 20)}...`);
+
+// Optional: Log the problematic user key for debugging
+if (userApiKey) {
+  console.log(`User API key received: ${userApiKey} (length: ${userApiKey?.length})`);
+}
 
   // COPY YOUR EXACT makeClaudeRequest FUNCTION HERE
   // This is identical to your pack code - no changes needed!
