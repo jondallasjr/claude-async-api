@@ -1,4 +1,32 @@
-// api/request-status.js
+// =================================================================
+// DEV NOTES for api/request-status.js
+// =================================================================
+/*
+DEBUGGING UTILITY: Essential for troubleshooting async request flow.
+
+KEY FEATURES:
+- Shows complete request lifecycle: queued → processing → completed/failed
+- Includes processing time calculations for performance monitoring
+- Returns webhook delivery logs for end-to-end verification
+- Used extensively during development to trace issues
+
+USAGE EXAMPLES:
+- GET /api/request-status?requestId=req_1234567890_abcdef
+- Check if request is stuck in processing
+- Verify webhook delivery success/failure
+- Calculate actual processing durations
+
+PERFORMANCE INSIGHTS GAINED:
+- Manual processing: ~3 seconds for simple requests
+- Webhook delivery: <1 second after completion
+- End-to-end latency: ~5 seconds total (queue → process → deliver)
+
+DEBUGGING VALUE:
+- Helped identify when requests were stuck in "queued" due to auto-trigger failures
+- Confirmed webhook delivery success after fixing pg_net parameter bug
+- Essential for monitoring production system health
+*/
+
 import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(

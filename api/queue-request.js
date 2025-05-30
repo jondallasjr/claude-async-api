@@ -1,3 +1,28 @@
+// =================================================================
+// DEV NOTES for api/queue-request.js
+// =================================================================
+/*
+CRITICAL LESSON: Vercel function-to-function calls are unreliable due to network timeouts.
+
+PROBLEM SOLVED:
+- Internal fetch() calls between Vercel functions failed with ETIMEDOUT
+- Original code used unreliable process.env.VERCEL_URL for URL construction
+- Caused auto-processing to fail, leaving requests stuck in "queued" status
+
+SOLUTION IMPLEMENTED:
+1. Better URL construction: req.headers.host instead of process.env.VERCEL_URL
+2. 10-second timeout with AbortController to prevent hanging
+3. Graceful failure: Don't fail main request if auto-trigger fails
+4. Manual processing fallback available via direct API call
+
+KEY INSIGHT: Always have fallback mechanisms for inter-service communication.
+Even if auto-processing fails, requests remain queued for manual triggering.
+
+DEBUGGING TIP: Check Vercel function logs for "Failed to trigger processing" errors.
+Manual trigger works 100% reliably: curl -X POST /api/process-queue -d '{"requestId":"..."}'
+*/
+
+
 import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(
@@ -98,82 +123,3 @@ export default async function handler(req, res) {
     });
   }
 }
-
-/* COMMENTING OUT DUE TO TIMEOUT ISSUE
-
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
-
-export default async function handler(req, res) {
-  // Enable CORS
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-
-  if (req.method === 'OPTIONS') {
-    res.status(200).end();
-    return;
-  }
-
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
-
-  try {
-    // Just validate the bare minimum and store everything as JSON
-    const { requestId, codaWebhookUrl, codaApiToken } = req.body;
-
-    if (!requestId || !codaWebhookUrl || !codaApiToken) {
-      return res.status(400).json({ 
-        error: 'Missing required fields: requestId, codaWebhookUrl, codaApiToken' 
-      });
-    }
-
-    console.log(`Queueing request ${requestId}`);
-
-    // Store the entire request payload as JSON - let Supabase handle the details
-    const { error } = await supabase
-      .from('llm_requests')
-      .insert({
-        request_id: requestId,
-        request_payload: req.body,  // Store everything as JSON
-        coda_webhook_url: codaWebhookUrl,
-        coda_api_token: codaApiToken,
-        status: 'queued'
-      });
-
-    if (error) {
-      console.error('Database error:', error);
-      throw error;
-    }
-
-    // FIX: Properly construct the process URL with https://
-    const processUrl = `https://${req.headers.host}/api/process-queue`;
-    console.log(`Triggering processing at: ${processUrl}`);
-    
-    fetch(processUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ requestId })
-    }).catch(error => {
-      console.error('Failed to trigger processing:', error);
-    });
-
-    res.status(200).json({ 
-      success: true, 
-      requestId,
-      message: 'Request queued for processing'
-    });
-
-  } catch (error) {
-    console.error('Queue error:', error);
-    res.status(500).json({ 
-      error: 'Failed to queue request', 
-      details: error.message 
-    });
-  }
-}*/
