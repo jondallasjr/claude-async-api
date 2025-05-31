@@ -3,7 +3,7 @@
 // =================================================================
 /*
 ROLE IN NEW ARCHITECTURE:
-- Receives request payload from Pack (including modelPricing when includeCost=true)
+- Receives request payload from Pack
 - Stores complete payload in Supabase for processing
 - Auto-triggers processing via internal function call
 - No business logic - pure queueing and triggering
@@ -20,9 +20,9 @@ KEY INSIGHT: Always have fallback mechanisms for inter-service communication.
 Even if auto-processing fails, requests remain queued for manual triggering.
 
 NEW ARCHITECTURE BENEFIT:
-- Pack sends modelPricing field automatically when includeCost=true
-- No changes needed here - payload is stored as-is in Supabase
-- Cost calculation happens downstream in process-queue.js
+- Pack sends modelPricing field automatically for every request
+- Cost calculation always happens downstream in process-queue.js
+- Every webhook includes cost information
 
 DEBUGGING TIP: Check Vercel function logs for "Failed to trigger processing" errors.
 Manual trigger works 100% reliably: curl -X POST /api/process-queue -d '{"requestId":"..."}'
@@ -59,7 +59,7 @@ export default async function handler(req, res) {
       });
     }
 
-    console.log(`Queueing request ${requestId}${req.body.includeCost ? ' (with cost calculation)' : ''}`);
+    console.log(`Queueing request ${requestId} (with cost calculation)`);
 
     // Store the complete request payload in Supabase (including modelPricing if present)
     const { error } = await supabase

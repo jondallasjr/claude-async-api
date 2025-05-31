@@ -16,9 +16,9 @@ VERCEL RESPONSIBILITIES:
 
 COST CALCULATION FLOW:
 1. Pack finds pricing for selected model
-2. When includeCost=true: Pack sends modelPricing in payload
+2. Pack always sends modelPricing in payload  
 3. Vercel calculates cost using Pack's pricing data
-4. Cost automatically included in webhook response (no separate checkRequest needed)
+4. Cost always included in webhook response
 
 IMPROVEMENTS IMPLEMENTED:
 - requestId included in webhook payload for correlation
@@ -98,16 +98,16 @@ export default async function handler(req, res) {
 
     // Handle different status scenarios
     if (request.status === 'completed') {
-      return res.status(200).json({ 
-        success: true, 
+      return res.status(200).json({
+        success: true,
         message: 'Request already completed',
         status: request.status
       });
     }
 
     if (request.status === 'failed') {
-      return res.status(200).json({ 
-        success: false, 
+      return res.status(200).json({
+        success: false,
         message: 'Request previously failed',
         error: request.error_message
       });
@@ -116,7 +116,7 @@ export default async function handler(req, res) {
     if (request.status === 'processing') {
       const processingTime = Date.now() - new Date(request.processing_started_at).getTime();
       if (processingTime < 300000) {
-        return res.status(409).json({ 
+        return res.status(409).json({
           error: 'Request currently being processed',
           processingTimeSeconds: Math.round(processingTime / 1000)
         });
@@ -127,8 +127,8 @@ export default async function handler(req, res) {
     // Mark as processing
     await supabase
       .from('llm_requests')
-      .update({ 
-        status: 'processing', 
+      .update({
+        status: 'processing',
         processing_started_at: new Date().toISOString(),
         error_message: null
       })
@@ -156,7 +156,7 @@ export default async function handler(req, res) {
 
   } catch (error) {
     console.error(`Processing error for ${requestId}:`, error);
-    
+
     await supabase
       .from('llm_requests')
       .update({
@@ -171,8 +171,8 @@ export default async function handler(req, res) {
 }
 
 async function callClaudeAPI(payload) {
-  const { 
-    prompt, 
+  const {
+    prompt,
     model = 'claude-sonnet-4-0',
     maxTokens = 4096,
     temperature,
@@ -185,14 +185,14 @@ async function callClaudeAPI(payload) {
 
   // Use system API key (Pack auth issue workaround)
   const apiKey = process.env.ANTHROPIC_API_KEY;
-  
+
   if (!apiKey) {
     throw new Error('No system API key configured');
   }
 
   const API_VERSION = "2023-06-01";
   const API_BASE_URL = "https://api.anthropic.com/v1";
-  
+
   // Build system prompt
   const finalSystemPrompt = jsonMode ?
     (systemPrompt ? `${JSON_SYSTEM_MESSAGE}\n\nAdditional instructions: ${systemPrompt}` : JSON_SYSTEM_MESSAGE) :
@@ -244,8 +244,8 @@ async function callClaudeAPI(payload) {
 }
 
 function processClaudeResponse(claudeResponse, requestPayload) {
-  const { jsonMode = false, extendedThinking = false, includeCost = false, modelPricing } = requestPayload;
-  
+  const { jsonMode = false, extendedThinking = false, modelPricing } = requestPayload;
+
   // Extract content
   let content;
   let thinking = null;
@@ -256,7 +256,7 @@ function processClaudeResponse(claudeResponse, requestPayload) {
     if (thinkingBlock) {
       thinking = thinkingBlock.content;
     }
-    
+
     const textBlock = claudeResponse.content?.find(block => block.type === "text");
     content = textBlock?.text || '';
   } else {
@@ -279,12 +279,12 @@ function processClaudeResponse(claudeResponse, requestPayload) {
     }
   }
 
-   // Build response for Pack
-   const response = {
-    requestId: requestPayload.requestId, // ← ADD THIS for correlation
+  // Build response for Pack
+  const response = {
+    requestId: requestPayload.requestId,
     content,
     model: requestPayload.model || 'claude-sonnet-4-0',
-    usage: claudeResponse.usage // Always include usage
+    usage: claudeResponse.usage
   };
 
   // Include thinking if it was used
@@ -292,12 +292,12 @@ function processClaudeResponse(claudeResponse, requestPayload) {
     response.thinking = thinking;
   }
 
-  // Calculate and include cost if requested and pricing is available
-  if (includeCost && modelPricing && claudeResponse.usage) {
+  // Always calculate and include cost when pricing is available
+  if (modelPricing && claudeResponse.usage) {
     const { input_tokens, output_tokens } = claudeResponse.usage;
     const inputCost = (input_tokens / 1000000) * modelPricing.input;
     const outputCost = (output_tokens / 1000000) * modelPricing.output;
-    
+
     response.cost = {
       model: requestPayload.model || 'claude-sonnet-4-0',
       inputTokens: input_tokens,
