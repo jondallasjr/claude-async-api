@@ -1,13 +1,14 @@
 // =================================================================
-// DEV NOTES for api/queue-request.js
+// DEV NOTES for api/queue-request.js (Updated 2025-05-31)
 // =================================================================
 /*
-CRITICAL LESSON: Vercel function-to-function calls are unreliable due to network timeouts.
+ROLE IN NEW ARCHITECTURE:
+- Receives request payload from Pack (including modelPricing when includeCost=true)
+- Stores complete payload in Supabase for processing
+- Auto-triggers processing via internal function call
+- No business logic - pure queueing and triggering
 
-PROBLEM SOLVED:
-- Internal fetch() calls between Vercel functions failed with ETIMEDOUT
-- Original code used unreliable process.env.VERCEL_URL for URL construction
-- Caused auto-processing to fail, leaving requests stuck in "queued" status
+CRITICAL LESSON: Vercel function-to-function calls are unreliable due to network timeouts.
 
 SOLUTION IMPLEMENTED:
 1. Better URL construction: req.headers.host instead of process.env.VERCEL_URL
@@ -18,10 +19,14 @@ SOLUTION IMPLEMENTED:
 KEY INSIGHT: Always have fallback mechanisms for inter-service communication.
 Even if auto-processing fails, requests remain queued for manual triggering.
 
+NEW ARCHITECTURE BENEFIT:
+- Pack sends modelPricing field automatically when includeCost=true
+- No changes needed here - payload is stored as-is in Supabase
+- Cost calculation happens downstream in process-queue.js
+
 DEBUGGING TIP: Check Vercel function logs for "Failed to trigger processing" errors.
 Manual trigger works 100% reliably: curl -X POST /api/process-queue -d '{"requestId":"..."}'
 */
-
 
 import { createClient } from '@supabase/supabase-js';
 
@@ -54,14 +59,14 @@ export default async function handler(req, res) {
       });
     }
 
-    console.log(`Queueing request ${requestId}`);
+    console.log(`Queueing request ${requestId}${req.body.includeCost ? ' (with cost calculation)' : ''}`);
 
-    // Store the request in Supabase
+    // Store the complete request payload in Supabase (including modelPricing if present)
     const { error } = await supabase
       .from('llm_requests')
       .insert({
         request_id: requestId,
-        request_payload: req.body,
+        request_payload: req.body, // Includes modelPricing when includeCost=true
         coda_webhook_url: codaWebhookUrl,
         coda_api_token: codaApiToken,
         status: 'queued'
@@ -72,16 +77,14 @@ export default async function handler(req, res) {
       throw error;
     }
 
-    // FIXED: Use more reliable processing trigger
+    // Auto-trigger processing
     try {
-      // Use the correct host from headers (this should work reliably)
       const processUrl = `https://${req.headers.host}/api/process-queue`;
       
       console.log(`Triggering processing at: ${processUrl}`);
       
-      // Add timeout and better error handling
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
       
       const response = await fetch(processUrl, {
         method: 'POST',
@@ -102,8 +105,6 @@ export default async function handler(req, res) {
       console.log(`Processing triggered successfully for ${requestId}`);
       
     } catch (fetchError) {
-      // Don't fail the main request if processing trigger fails
-      // The request is already queued, user can manually trigger if needed
       console.error('Failed to trigger processing:', fetchError);
       console.log(`Request ${requestId} is queued but processing may need manual trigger`);
     }
@@ -111,8 +112,7 @@ export default async function handler(req, res) {
     res.status(200).json({ 
       success: true, 
       requestId,
-      message: 'Request queued for processing',
-      note: 'If processing doesn\'t start automatically, it can be triggered manually'
+      message: 'Request queued for processing'
     });
 
   } catch (error) {

@@ -1,31 +1,48 @@
 // =================================================================
-// DEV NOTES for api/process-queue.js  
+// DEV NOTES for api/process-queue.js (Updated 2025-05-31)
 // =================================================================
 /*
-CRITICAL LESSON: Coda Pack authentication truncates user API keys from 108→24 chars.
+ARCHITECTURE UPDATE - NEW ROLE SEPARATION:
 
-PROBLEM SOLVED:
-- User Claude API keys were getting truncated in Pack authentication
+PACK RESPONSIBILITIES:
+- Model names and pricing data (single source of truth)
+- UI/UX and parameter collection
+- Sends specific model pricing to Vercel when includeCost=true
+
+VERCEL RESPONSIBILITIES:
+- All Claude API calls and response processing
+- Cost calculation using pricing data from Pack
+- Includes cost automatically in webhook payload when requested
+
+COST CALCULATION FLOW:
+1. Pack finds pricing for selected model
+2. When includeCost=true: Pack sends modelPricing in payload
+3. Vercel calculates cost using Pack's pricing data
+4. Cost automatically included in webhook response (no separate checkRequest needed)
+
+IMPROVEMENTS IMPLEMENTED:
+- requestId included in webhook payload for correlation
+- Cost calculation happens in Vercel using Pack's pricing
+- JSON system message only defined here (no duplication)
+- Validation removed (let Claude API handle errors for better messages)
+- Temperature only added if provided (handles undefined cleanly)
+
+CRITICAL LESSON: Coda Pack authentication truncates user API keys from 108→24 chars.
 - Expected: sk-ant-api03-*****************-TLsQqwp8AktN3qUy_tUAW3Sl-TBw-wVaVDAAA (108 chars)
 - Received: BdoveNwSkOfb58rCtsAwgcR2 (24 chars)
+- CURRENT SOLUTION: Force system API key usage until Pack auth is resolved
 
-CURRENT SOLUTION:
-- Force system API key usage: const apiKey = process.env.ANTHROPIC_API_KEY
-- Bypasses Pack auth issues until root cause is resolved
-
-IMPROVED STATUS HANDLING:
+STATUS HANDLING:
 - Handles already completed/failed requests gracefully
 - Detects stuck processing requests (>5 min) and resets them
 - Returns appropriate HTTP status codes for different scenarios
 
 TIMEOUT PROTECTION:
-- maxDuration: 300 (5 minutes) for long Claude API calls
-- Supports extended thinking and large responses without timeout
-- Consider enabling Fluid Compute for even longer durations (up to 800s)
+- maxDuration: 300 (5 minutes) for extended thinking and large responses
+- Consider Fluid Compute for even longer durations (up to 800s)
 
 TODO: Investigate Pack authentication to restore user API key functionality
 */
-
 
 import { createClient } from '@supabase/supabase-js';
 
@@ -37,6 +54,26 @@ const supabase = createClient(
 export const config = {
   maxDuration: 300, // 5 minutes
 };
+
+// JSON mode system message - ONLY defined here
+const JSON_SYSTEM_MESSAGE = `You respond only in JSON. Your response must be single, valid JSON object.
+Requirements:
+- Always start with {
+- Use proper JSON syntax and escaping
+- Use only straight double quotes (")
+- Include only JSON data, no explanations
+- Always end with }
+- CRITICAL: Always escape newlines as \\n in string values, never include actual line breaks
+- CRITICAL: Always escape tabs as \\t, carriage returns as \\r, and other control characters`;
+
+// Fallback JSON sanitization - only used if initial parse fails
+function sanitizeJson(jsonString) {
+  return jsonString
+    .replace(/\n/g, '\\n')
+    .replace(/\r/g, '\\r')
+    .replace(/\t/g, '\\t')
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '');
+}
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -59,7 +96,7 @@ export default async function handler(req, res) {
       throw new Error(`Request not found: ${requestId}`);
     }
 
-    // IMPROVED: Handle different status scenarios
+    // Handle different status scenarios
     if (request.status === 'completed') {
       return res.status(200).json({ 
         success: true, 
@@ -77,7 +114,6 @@ export default async function handler(req, res) {
     }
 
     if (request.status === 'processing') {
-      // Check if it's been processing too long (over 5 minutes)
       const processingTime = Date.now() - new Date(request.processing_started_at).getTime();
       if (processingTime < 300000) {
         return res.status(409).json({ 
@@ -94,26 +130,24 @@ export default async function handler(req, res) {
       .update({ 
         status: 'processing', 
         processing_started_at: new Date().toISOString(),
-        error_message: null // Clear any previous errors
+        error_message: null
       })
       .eq('request_id', requestId);
 
-    // Extract the original request payload
-    const payload = request.request_payload;
-    
+    // Call Claude API
     console.log(`Calling Claude API for ${requestId}`);
-
-    // Call Claude API - use the EXACT same logic as your existing pack
-    const claudeResponse = await callClaudeAPI(payload);
-
+    const claudeResponse = await callClaudeAPI(request.request_payload);
     console.log(`Claude completed for ${requestId}`);
 
-    // Mark as completed - this triggers the webhook
+    // Process response for Pack consumption
+    const processedResponse = processClaudeResponse(claudeResponse, request.request_payload);
+
+    // Mark as completed - triggers webhook
     await supabase
       .from('llm_requests')
       .update({
         status: 'completed',
-        response_payload: claudeResponse,  // Store full response as JSON
+        response_payload: processedResponse,
         completed_at: new Date().toISOString()
       })
       .eq('request_id', requestId);
@@ -136,14 +170,12 @@ export default async function handler(req, res) {
   }
 }
 
-// This function contains your EXACT existing Claude API logic
 async function callClaudeAPI(payload) {
-  // Extract what we need from the payload
   const { 
     prompt, 
     model = 'claude-sonnet-4-0',
     maxTokens = 4096,
-    temperature = 1.0,
+    temperature,
     systemPrompt = '',
     jsonMode = false,
     extendedThinking = false,
@@ -151,28 +183,17 @@ async function callClaudeAPI(payload) {
     userApiKey
   } = payload;
 
-  // FIXED: Always use system API key until Pack authentication is fixed
+  // Use system API key (Pack auth issue workaround)
   const apiKey = process.env.ANTHROPIC_API_KEY;
   
-  // Debug logging
-  console.log(`User API key received: ${userApiKey} (length: ${userApiKey?.length})`);
-  console.log(`Using system API key: ${apiKey?.substring(0, 20)}... (length: ${apiKey?.length})`);
-  
   if (!apiKey) {
-    throw new Error('No system API key configured in Vercel environment');
+    throw new Error('No system API key configured');
   }
 
   const API_VERSION = "2023-06-01";
   const API_BASE_URL = "https://api.anthropic.com/v1";
   
-  const JSON_SYSTEM_MESSAGE = `You are a JSON Generation AI. Your responses must be single, valid JSON object. 
-Requirements:
-- Always start with {
-- Use proper JSON syntax and escaping
-- Use only straight double quotes (")
-- Include only JSON data, no explanations
-- Always end with }`;
-
+  // Build system prompt
   const finalSystemPrompt = jsonMode ?
     (systemPrompt ? `${JSON_SYSTEM_MESSAGE}\n\nAdditional instructions: ${systemPrompt}` : JSON_SYSTEM_MESSAGE) :
     systemPrompt;
@@ -191,19 +212,13 @@ Requirements:
     system: finalSystemPrompt || undefined,
   };
 
-  if (!extendedThinking && !jsonMode) {
+  // Add temperature if provided
+  if (temperature !== undefined) {
     requestBody.temperature = temperature;
-  } else if (jsonMode && !extendedThinking) {
-    requestBody.temperature = 0.2;
   }
 
+  // Extended thinking - let API handle all validation
   if (extendedThinking) {
-    if (!model.includes("claude-opus-4") && !model.includes("claude-sonnet-4") && !model.includes("claude-3-7-sonnet")) {
-      throw new Error("Extended thinking only available with Claude Opus 4, Sonnet 4, and 3.7 Sonnet");
-    }
-    if (thinkingBudgetTokens >= maxTokens) {
-      throw new Error("Thinking budget must be less than max_tokens");
-    }
     requestBody.thinking = {
       type: "enabled",
       budget_tokens: thinkingBudgetTokens
@@ -225,19 +240,73 @@ Requirements:
     throw new Error(`Claude API error (${response.status}): ${errorBody}`);
   }
 
-  const responseData = await response.json();
+  return await response.json();
+}
 
-  // Validate response
+function processClaudeResponse(claudeResponse, requestPayload) {
+  const { jsonMode = false, extendedThinking = false, includeCost = false, modelPricing } = requestPayload;
+  
+  // Extract content
+  let content;
+  let thinking = null;
+
   if (extendedThinking) {
-    const hasTextBlock = responseData.content?.some(block => block.type === "text" && block.text);
-    if (!hasTextBlock) {
-      throw new Error("Invalid response format from Claude API");
+    // Always include thinking if extended thinking was used
+    const thinkingBlock = claudeResponse.content?.find(block => block.type === "thinking");
+    if (thinkingBlock) {
+      thinking = thinkingBlock.content;
     }
+    
+    const textBlock = claudeResponse.content?.find(block => block.type === "text");
+    content = textBlock?.text || '';
   } else {
-    if (!responseData.content?.[0]?.text) {
-      throw new Error("Invalid response format from Claude API");
+    content = claudeResponse.content?.[0]?.text || '';
+  }
+
+  // Handle JSON mode with fallback sanitization
+  if (jsonMode) {
+    try {
+      // Try parsing as-is first (Claude should follow system prompt)
+      JSON.parse(content);
+    } catch (parseError) {
+      console.log('Initial JSON parse failed, applying sanitization fallback');
+      try {
+        content = sanitizeJson(content);
+        JSON.parse(content); // Verify sanitized version parses
+      } catch (sanitizeError) {
+        throw new Error(`JSON response invalid even after sanitization: ${sanitizeError.message}`);
+      }
     }
   }
 
-  return responseData;
+   // Build response for Pack
+   const response = {
+    requestId: requestPayload.requestId, // ← ADD THIS for correlation
+    content,
+    model: requestPayload.model || 'claude-sonnet-4-0',
+    usage: claudeResponse.usage // Always include usage
+  };
+
+  // Include thinking if it was used
+  if (thinking) {
+    response.thinking = thinking;
+  }
+
+  // Calculate and include cost if requested and pricing is available
+  if (includeCost && modelPricing && claudeResponse.usage) {
+    const { input_tokens, output_tokens } = claudeResponse.usage;
+    const inputCost = (input_tokens / 1000000) * modelPricing.input;
+    const outputCost = (output_tokens / 1000000) * modelPricing.output;
+    
+    response.cost = {
+      model: requestPayload.model || 'claude-sonnet-4-0',
+      inputTokens: input_tokens,
+      outputTokens: output_tokens,
+      inputCost: parseFloat(inputCost.toFixed(6)),
+      outputCost: parseFloat(outputCost.toFixed(6)),
+      totalCost: parseFloat((inputCost + outputCost).toFixed(6))
+    };
+  }
+
+  return response;
 }
