@@ -66,7 +66,7 @@ export default async function handler(req, res) {
       .from('llm_requests')
       .insert({
         request_id: requestId,
-        request_payload: req.body, // Includes modelPricing when includeCost=true
+        request_payload: req.body,
         coda_webhook_url: codaWebhookUrl,
         coda_api_token: codaApiToken,
         status: 'queued'

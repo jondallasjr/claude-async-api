@@ -7,7 +7,6 @@ ARCHITECTURE UPDATE - NEW ROLE SEPARATION:
 PACK RESPONSIBILITIES:
 - Model names and pricing data (single source of truth)
 - UI/UX and parameter collection
-- Sends specific model pricing to Vercel when includeCost=true
 
 VERCEL RESPONSIBILITIES:
 - All Claude API calls and response processing
@@ -141,6 +140,8 @@ export default async function handler(req, res) {
 
     // Process response for Pack consumption
     const processedResponse = processClaudeResponse(claudeResponse, request.request_payload);
+
+    console.log('Processed response:', JSON.stringify(processedResponse, null, 2));
 
     // Mark as completed - triggers webhook
     await supabase
