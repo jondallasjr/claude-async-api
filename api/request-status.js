@@ -1,13 +1,19 @@
 // =================================================================
-// DEV NOTES for api/request-status.js
+// DEV NOTES for api/request-status.js (Updated 2025-06-03)
 // =================================================================
 /*
 DEBUGGING UTILITY: Essential for troubleshooting async request flow.
+
+NEW FEATURE: Response payload included in status checks
+- Returns cleaned response payload (removes internal Supabase fields)
+- Includes full Claude response with cost calculation
+- Useful for debugging response content without checking Coda
 
 KEY FEATURES:
 - Shows complete request lifecycle: queued → processing → completed/failed
 - Includes processing time calculations for performance monitoring
 - Returns webhook delivery logs for end-to-end verification
+- NOW: Returns actual response payload for completed requests
 - Used extensively during development to trace issues
 
 USAGE EXAMPLES:
@@ -15,6 +21,7 @@ USAGE EXAMPLES:
 - Check if request is stuck in processing
 - Verify webhook delivery success/failure
 - Calculate actual processing durations
+- Preview response content and cost calculation
 
 PERFORMANCE INSIGHTS GAINED:
 - Manual processing: ~3 seconds for simple requests
@@ -25,6 +32,7 @@ DEBUGGING VALUE:
 - Helped identify when requests were stuck in "queued" due to auto-trigger failures
 - Confirmed webhook delivery success after fixing pg_net parameter bug
 - Essential for monitoring production system health
+- NOW: Can verify response content matches expectations
 */
 
 import { createClient } from '@supabase/supabase-js';
@@ -58,10 +66,10 @@ export default async function handler(req, res) {
   try {
     console.log(`Checking status for request: ${requestId}`);
     
-    // Get request status
+    // Get request status INCLUDING response payload
     const { data: request, error } = await supabase
       .from('llm_requests')
-      .select('request_id, status, created_at, processing_started_at, completed_at, error_message')
+      .select('request_id, status, created_at, processing_started_at, completed_at, error_message, response_payload')
       .eq('request_id', requestId)
       .single();
 
@@ -84,7 +92,23 @@ export default async function handler(req, res) {
       );
     }
 
-    return res.json({
+    // Clean the response payload (remove internal/unnecessary fields)
+    let cleanedResponsePayload = null;
+    if (request.response_payload) {
+      // The response_payload should already be cleaned by process-queue.js
+      // But we can do additional cleaning here if needed
+      const payload = request.response_payload;
+      
+      // Remove any internal fields we don't want to expose
+      const fieldsToRemove = ['signature', 'internal_metadata', 'system_info'];
+      cleanedResponsePayload = { ...payload };
+      
+      fieldsToRemove.forEach(field => {
+        delete cleanedResponsePayload[field];
+      });
+    }
+
+    const response = {
       requestId: request.request_id,
       status: request.status,
       createdAt: request.created_at,
@@ -93,7 +117,14 @@ export default async function handler(req, res) {
       processingTimeSeconds,
       errorMessage: request.error_message,
       webhookLogs: webhookLogs || []
-    });
+    };
+
+    // Only include response payload if request is completed and has payload
+    if (request.status === 'completed' && cleanedResponsePayload) {
+      response.responsePayload = cleanedResponsePayload;
+    }
+
+    return res.json(response);
 
   } catch (error) {
     console.error('Status check error:', error);

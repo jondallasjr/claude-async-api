@@ -9,8 +9,6 @@ Added cleanClaudeResponse() function to strip unnecessary data from Claude API r
 - Reduce webhook payload size from ~50KB to ~5KB (90% reduction)
 - Improve webhook delivery performance and reduce bandwidth usage
 
-ARCHITECTURE UPDATE - PACK-ONLY REQUEST BUILDING:
-
 NEW ROLE SEPARATION:
 - PACK: Builds complete Claude API request (claudeRequest field)
 - VERCEL: Forwards claudeRequest as-is to Claude API, adds cost calculation
