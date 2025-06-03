@@ -47,7 +47,7 @@ export default async function handler(req, res) {
   // Enable CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-claude-api-key, x-coda-api-token');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
   if (req.method === 'OPTIONS') {
     res.status(200).end();
@@ -59,61 +59,22 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { requestId, codaWebhookUrl } = req.body;
+    const { requestId, codaWebhookUrl, codaApiToken } = req.body;
 
-    // Extract API keys from headers (new approach)
-    const claudeApiKeyFromHeader = req.headers['x-claude-api-key'];
-    const codaApiTokenFromHeader = req.headers['x-coda-api-token'];
-    
-    // Also check payload for backward compatibility
-    const { userApiKey: claudeApiKeyFromPayload, codaApiToken: codaApiTokenFromPayload } = req.body;
-
-    // Use headers first, fall back to payload
-    const claudeApiKey = claudeApiKeyFromHeader || claudeApiKeyFromPayload;
-    const codaApiToken = codaApiTokenFromHeader || codaApiTokenFromPayload || req.body.codaApiToken;
-
-    // Debug logging (remove in production)
-    console.log('=== API Key Debug Info ===');
-    console.log(`Claude key from header: ${claudeApiKeyFromHeader ? `${claudeApiKeyFromHeader.length} chars, starts with ${claudeApiKeyFromHeader.substring(0, 12)}...` : 'not found'}`);
-    console.log(`Claude key from payload: ${claudeApiKeyFromPayload ? `${claudeApiKeyFromPayload.length} chars` : 'not found'}`);
-    console.log(`Coda token from header: ${codaApiTokenFromHeader ? `${codaApiTokenFromHeader.length} chars` : 'not found'}`);
-    console.log(`Coda token from payload: ${codaApiTokenFromPayload ? `${codaApiTokenFromPayload.length} chars` : 'not found'}`);
-    console.log(`Final Claude key: ${claudeApiKey ? `${claudeApiKey.length} chars` : 'not found'}`);
-    console.log(`Final Coda token: ${codaApiToken ? `${codaApiToken.length} chars` : 'not found'}`);
-
-    if (!requestId || !codaWebhookUrl) {
+    if (!requestId || !codaWebhookUrl || !codaApiToken) {
       return res.status(400).json({ 
-        error: 'Missing required fields: requestId and codaWebhookUrl are required' 
+        error: 'Missing required fields: requestId, codaWebhookUrl, codaApiToken' 
       });
     }
 
-    if (!claudeApiKey) {
-      return res.status(400).json({
-        error: 'Missing Claude API key. Check Pack authentication setup.'
-      });
-    }
+    console.log(`Queueing request ${requestId} (with cost calculation)`);
 
-    if (!codaApiToken) {
-      return res.status(400).json({
-        error: 'Missing Coda API token. Check Pack authentication setup.'
-      });
-    }
-
-    console.log(`Queueing request ${requestId} with multi-header auth`);
-
-    // Store the complete request payload in Supabase
-    // Update the payload to include the extracted keys
-    const updatedPayload = {
-      ...req.body,
-      userApiKey: claudeApiKey,      // Ensure we store the key we're actually using
-      codaApiToken: codaApiToken     // Ensure we store the token we're actually using
-    };
-
+    // Store the complete request payload in Supabase (including modelPricing if present)
     const { error } = await supabase
       .from('llm_requests')
       .insert({
         request_id: requestId,
-        request_payload: updatedPayload,
+        request_payload: req.body,
         coda_webhook_url: codaWebhookUrl,
         coda_api_token: codaApiToken,
         status: 'queued'
@@ -124,7 +85,7 @@ export default async function handler(req, res) {
       throw error;
     }
 
-    // Auto-trigger processing (existing logic unchanged)
+    // Auto-trigger processing
     try {
       const processUrl = `https://${req.headers.host}/api/process-queue`;
       
@@ -159,8 +120,7 @@ export default async function handler(req, res) {
     res.status(200).json({ 
       success: true, 
       requestId,
-      message: 'Request queued for processing',
-      authMethod: claudeApiKeyFromHeader ? 'multi-header' : 'payload-fallback'
+      message: 'Request queued for processing'
     });
 
   } catch (error) {
