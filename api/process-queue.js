@@ -2,12 +2,7 @@
 // DEV NOTES for api/process-queue.js (Updated 2025-06-03)
 // =================================================================
 /*
-Added cleanClaudeResponse() function to strip unnecessary data from Claude API responses:
-- Remove massive encrypted_content and encrypted_index fields from web search results/citations
-- Strip tool_use_id, role, type, stop_reason, stop_sequence metadata
-- Preserve essential data: URLs, titles, citations, content, usage, cost
-- Reduce webhook payload size from ~50KB to ~5KB (90% reduction)
-- Improve webhook delivery performance and reduce bandwidth usage
+ARCHITECTURE UPDATE - PACK-ONLY REQUEST BUILDING:
 
 NEW ROLE SEPARATION:
 - PACK: Builds complete Claude API request (claudeRequest field)
@@ -39,6 +34,12 @@ STATUS HANDLING:
 
 TIMEOUT PROTECTION:
 - maxDuration: 300 (5 minutes) for extended thinking and large responses
+
+CITATION CLEANING (NEW):
+- Removes massive encrypted_content and encrypted_index fields (90% payload reduction)
+- Converts <cite> tags to readable markdown citations
+- Maps search result indices to actual URLs and titles
+- Preserves all essential data while dramatically reducing size
 
 TODO: Investigate Pack authentication to restore user API key functionality
 */
@@ -151,158 +152,9 @@ export default async function handler(req, res) {
   }
 }
 
-
-function cleanClaudeResponse(claudeResponse) {
-  // Deep clone to avoid mutating original
-  const cleaned = JSON.parse(JSON.stringify(claudeResponse));
-
-  // Build a citation map from search results for later reference
-  const citationMap = buildCitationMap(cleaned.content);
-
-  // Clean up content array
-  if (cleaned.content && Array.isArray(cleaned.content)) {
-    cleaned.content = cleaned.content.map(item => {
-      if (item.type === 'server_tool_use') {
-        // Keep only essential tool use info
-        return {
-          name: item.name,
-          input: item.input
-        };
-      }
-
-      if (item.type === 'web_search_tool_result' && item.content) {
-        // Remove tool_use_id if present, keep search results for citation mapping
-        const cleaned = { ...item };
-        delete cleaned.tool_use_id;
-        return {
-          ...cleaned,
-          content: item.content.map((result, index) => ({
-            url: result.url,
-            title: result.title,
-            page_age: result.page_age,
-            // Add index for citation mapping
-            _citation_index: index
-          }))
-        };
-      }
-
-      if (item.type === 'text') {
-        // Process citations and convert <cite> tags to readable format
-        let processedText = item.text;
-
-        if (processedText && processedText.includes('<cite')) {
-          processedText = replaceCiteTags(processedText, citationMap);
-        }
-
-        return {
-          ...item,
-          text: processedText,
-          // Keep minimal citation data if it exists
-          citations: item.citations ? item.citations.map(citation => ({
-            url: citation.url,
-            title: citation.title,
-            cited_text: citation.cited_text
-            // Remove: encrypted_index, type, encrypted_content
-          })) : undefined
-        };
-      }
-
-      return item;
-    });
-  }
-
-  // Remove unnecessary top-level fields
-  delete cleaned.role;
-  delete cleaned.type;
-  delete cleaned.stop_sequence;
-  delete cleaned.stop_reason;
-
-  return cleaned;
-}
-
-function buildCitationMap(content) {
-  const citationMap = new Map();
-  let searchResultIndex = 0;
-
-  if (!content || !Array.isArray(content)) return citationMap;
-
-  content.forEach(item => {
-    if (item.type === 'web_search_tool_result' && item.content) {
-      item.content.forEach((result, resultIndex) => {
-        // Map search result index to citation info
-        const key = `${searchResultIndex}-${resultIndex}`;
-        citationMap.set(key, {
-          url: result.url,
-          title: result.title,
-          page_age: result.page_age
-        });
-      });
-      searchResultIndex++;
-    }
-  });
-
-  return citationMap;
-}
-
-function replaceCiteTags(text, citationMap) {
-  // Pattern to match <cite index="...">...</cite> tags
-  const citePattern = /<cite index="([^"]+)">(.*?)<\/cite>/g;
-
-  return text.replace(citePattern, (match, indexStr, citedText) => {
-    // Parse index string (could be "1-2" or "1-2,3-4" for multiple sources)
-    const indices = indexStr.split(',').map(idx => idx.trim());
-
-    // Build citation references
-    const citations = indices.map(index => {
-      const citation = citationMap.get(index);
-      if (citation) {
-        return `[${citation.title}](${citation.url})`;
-      }
-      return `[Source ${index}]`; // Fallback if citation not found
-    });
-
-    // Return the cited text with inline citation(s)
-    if (citations.length === 1) {
-      return `${citedText} ${citations[0]}`;
-    } else {
-      return `${citedText} (Sources: ${citations.join(', ')})`;
-    }
-  });
-}
-
-// Alternative: Convert to footnote style instead of inline
-function replaceCiteTagsWithFootnotes(text, citationMap) {
-  const citePattern = /<cite index="([^"]+)">(.*?)<\/cite>/g;
-  const footnotes = [];
-  let footnoteCounter = 1;
-
-  const processedText = text.replace(citePattern, (match, indexStr, citedText) => {
-    const indices = indexStr.split(',').map(idx => idx.trim());
-
-    const footnoteRefs = indices.map(index => {
-      const citation = citationMap.get(index);
-      if (citation) {
-        footnotes.push(`[${footnoteCounter}] ${citation.title} - ${citation.url}`);
-        return `[${footnoteCounter++}]`;
-      }
-      footnotes.push(`[${footnoteCounter}] Source ${index}`);
-      return `[${footnoteCounter++}]`;
-    });
-
-    return `${citedText}${footnoteRefs.join('')}`;
-  });
-
-  // Append footnotes at the end if any were found
-  if (footnotes.length > 0) {
-    return `${processedText}\n\n## References\n${footnotes.join('\n')}`;
-  }
-
-  return processedText;
-}
-
 async function callClaudeAPI(payload) {
   // Extract the pre-built Claude request and metadata
-  const {
+  const { 
     claudeRequest,     // Complete Claude API request from Pack
     userApiKey
   } = payload;
@@ -313,13 +165,13 @@ async function callClaudeAPI(payload) {
 
   // Use system API key (until Pack auth is fixed)
   const apiKey = process.env.ANTHROPIC_API_KEY;
-
+  
   if (!apiKey) {
     throw new Error('No system API key configured');
   }
-
+  
   console.log('Sending request to Claude API:', JSON.stringify(claudeRequest, null, 2));
-
+  
   // Send the request exactly as built by the Pack
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -339,15 +191,126 @@ async function callClaudeAPI(payload) {
   return await response.json();
 }
 
+/**
+ * Build search result mapping for citation conversion
+ */
+function buildSearchResultMap(content) {
+  const searchResults = new Map();
+  let searchIndex = 0;
+  
+  if (!Array.isArray(content)) return searchResults;
+  
+  content.forEach(item => {
+    if (item.type === 'web_search_tool_result' && item.content) {
+      item.content.forEach((result, resultIndex) => {
+        const key = `${searchIndex}-${resultIndex}`;
+        searchResults.set(key, {
+          url: result.url,
+          title: result.title,
+          page_age: result.page_age
+        });
+      });
+      searchIndex++;
+    }
+  });
+  
+  console.log(`Mapped ${searchResults.size} search results for citations`);
+  return searchResults;
+}
+
+/**
+ * Convert <cite> tags to markdown inline citations
+ */
+function convertCitationsToMarkdown(text, searchResults) {
+  if (!text || typeof text !== 'string') return text;
+  
+  // Convert content to content [Title](URL)
+  return text.replace(/(.*?)<\/antml:cite>/g, (match, indexStr, citedText) => {
+    const indices = indexStr.split(',').map(idx => idx.trim());
+    const citations = [];
+    
+    indices.forEach(index => {
+      const source = searchResults.get(index);
+      if (source) {
+        citations.push(`[${source.title}](${source.url})`);
+      } else {
+        console.warn(`Missing source for citation index: ${index}`);
+        citations.push(`[Source ${index}](#)`);
+      }
+    });
+    
+    // Return cited text followed by citations
+    return `${citedText} ${citations.join(', ')}`;
+  });
+}
+
+/**
+ * Clean and optimize Claude response content
+ */
+function cleanClaudeContent(content) {
+  if (!Array.isArray(content)) return content;
+  
+  const searchResults = buildSearchResultMap(content);
+  
+  return content.map(item => {
+    // Clean web search tool results - remove massive encrypted content
+    if (item.type === 'web_search_tool_result') {
+      return {
+        type: item.type,
+        content: item.content?.map(result => ({
+          type: result.type,
+          title: result.title,
+          url: result.url,
+          page_age: result.page_age
+          // Remove encrypted_content (massive field)
+        })) || []
+      };
+    }
+    
+    // Clean text blocks with citations
+    if (item.type === 'text') {
+      const cleaned = {
+        type: item.type,
+        text: convertCitationsToMarkdown(item.text, searchResults)
+      };
+      
+      // Add direct citations if present (cleaned)
+      if (item.citations && item.citations.length > 0) {
+        cleaned.citations = item.citations.map(citation => ({
+          cited_text: citation.cited_text,
+          url: citation.url,
+          title: citation.title
+          // Remove encrypted_index (large field)
+        }));
+      }
+      
+      return cleaned;
+    }
+    
+    // Keep server tool use as-is but remove tool_use_id
+    if (item.type === 'server_tool_use') {
+      return {
+        type: item.type,
+        name: item.name,
+        input: item.input
+        // Remove tool_use_id
+      };
+    }
+    
+    // Keep other content types as-is
+    return item;
+  });
+}
+
 function processClaudeResponse(claudeResponse, requestPayload) {
-  const { modelPricing, responseOptions } = requestPayload;
+  const { modelPricing } = requestPayload;
 
-  // Clean the response first (now handles citations properly)
-  const cleanedResponse = cleanClaudeResponse(claudeResponse);
-
-  // Start with cleaned Claude response
+  // Start with essential fields only (remove bloat)
   const response = {
-    ...cleanedResponse,
+    id: claudeResponse.id,
+    model: claudeResponse.model,
+    content: cleanClaudeContent(claudeResponse.content),
+    usage: claudeResponse.usage,
     requestId: requestPayload.requestId,
     completedAt: new Date().toISOString()
   };
@@ -368,6 +331,12 @@ function processClaudeResponse(claudeResponse, requestPayload) {
       currency: 'USD'
     };
   }
+
+  // Log size reduction
+  const originalSize = JSON.stringify(claudeResponse).length;
+  const cleanedSize = JSON.stringify(response).length;
+  const reduction = ((originalSize - cleanedSize) / originalSize * 100).toFixed(1);
+  console.log(`Payload size reduced by ${reduction}% (${originalSize} → ${cleanedSize} bytes)`);
 
   return response;
 }
