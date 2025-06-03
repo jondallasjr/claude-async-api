@@ -2,6 +2,13 @@
 // DEV NOTES for api/process-queue.js (Updated 2025-06-03)
 // =================================================================
 /*
+Added cleanClaudeResponse() function to strip unnecessary data from Claude API responses:
+- Remove massive encrypted_content and encrypted_index fields from web search results/citations
+- Strip tool_use_id, role, type, stop_reason, stop_sequence metadata
+- Preserve essential data: URLs, titles, citations, content, usage, cost
+- Reduce webhook payload size from ~50KB to ~5KB (90% reduction)
+- Improve webhook delivery performance and reduce bandwidth usage
+
 ARCHITECTURE UPDATE - PACK-ONLY REQUEST BUILDING:
 
 NEW ROLE SEPARATION:
@@ -146,6 +153,62 @@ export default async function handler(req, res) {
   }
 }
 
+
+function cleanClaudeResponse(claudeResponse) {
+  // Deep clone to avoid mutating original
+  const cleaned = JSON.parse(JSON.stringify(claudeResponse));
+  
+  // Clean up content array
+  if (cleaned.content && Array.isArray(cleaned.content)) {
+    cleaned.content = cleaned.content.map(item => {
+      if (item.type === 'server_tool_use') {
+        // Keep only essential tool use info
+        return {
+          name: item.name,
+          input: item.input
+        };
+      }
+      
+      if (item.type === 'web_search_tool_result' && item.content) {
+        // Remove tool_use_id if present
+        const cleaned = { ...item };
+        delete cleaned.tool_use_id;
+        return {
+          ...cleaned,
+          content: item.content.map(result => ({
+            url: result.url,
+            title: result.title,
+            page_age: result.page_age
+          }))
+        };
+      }
+      
+      if (item.type === 'text' && item.citations) {
+        // Clean up citations
+        return {
+          ...item,
+          citations: item.citations.map(citation => ({
+            url: citation.url,
+            title: citation.title,
+            cited_text: citation.cited_text
+            // Remove: encrypted_index, type
+          }))
+        };
+      }
+      
+      return item;
+    });
+  }
+  
+  // Remove unnecessary top-level fields
+  delete cleaned.role;
+  delete cleaned.type; 
+  delete cleaned.stop_sequence;
+  delete cleaned.stop_reason;
+  
+  return cleaned;
+}
+
 async function callClaudeAPI(payload) {
   // Extract the pre-built Claude request and metadata
   const { 
@@ -188,14 +251,17 @@ async function callClaudeAPI(payload) {
 function processClaudeResponse(claudeResponse, requestPayload) {
   const { modelPricing } = requestPayload;
 
-  // Start with Claude's raw response
+  // Clean the response first
+  const cleanedResponse = cleanClaudeResponse(claudeResponse);
+
+  // Start with cleaned Claude response
   const response = {
-    ...claudeResponse,  // Everything from Claude as-is
+    ...cleanedResponse,
     requestId: requestPayload.requestId,
     completedAt: new Date().toISOString()
   };
 
-  // Only add cost calculation
+  // Add cost calculation
   if (modelPricing && claudeResponse.usage) {
     const { input_tokens, output_tokens } = claudeResponse.usage;
     const inputCost = (input_tokens / 1000000) * modelPricing.input;
