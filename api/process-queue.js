@@ -289,7 +289,12 @@ function convertCitationsToMarkdown(text, searchResults) {
  * Clean and optimize Claude response content
  */
 function cleanClaudeContent(content) {
-  if (!Array.isArray(content)) return content;
+  if (!Array.isArray(content)) {
+    console.log('Content is not an array:', typeof content);
+    return content;
+  }
+  
+  console.log(`Starting content cleaning with ${content.length} items`);
   
   const searchResults = buildSearchResultMap(content);
   const processedContent = [];
@@ -298,6 +303,8 @@ function cleanClaudeContent(content) {
   let currentTextBlock = '';
   
   content.forEach((item, index) => {
+    console.log(`Processing item ${index}: type=${item.type}`);
+    
     // Clean web search tool results - remove massive encrypted content
     if (item.type === 'web_search_tool_result') {
       processedContent.push({
@@ -326,10 +333,28 @@ function cleanClaudeContent(content) {
     
     // Handle text blocks with smart merging
     if (item.type === 'text') {
-      let processedText = convertCitationsToMarkdown(item.text, searchResults);
+      console.log(`Processing text block ${index}, length: ${item.text?.length}`);
+      
+      let processedText = item.text;
+      
+      // Check if text contains citations
+      if (processedText && processedText.includes('<cite index=')) {
+        console.log(`Found citations in text block ${index}, processing...`);
+        const originalLength = processedText.length;
+        processedText = convertCitationsToMarkdown(processedText, searchResults);
+        console.log(`Citation conversion: ${originalLength} → ${processedText.length} chars`);
+        
+        // Log if no conversion happened
+        if (processedText.includes('<cite index=')) {
+          console.warn(`Citations still present after conversion in block ${index}`);
+        }
+      } else {
+        console.log(`No citations found in text block ${index}`);
+      }
       
       // Add direct citations if present (but prefer inline citations)
       if (item.citations && item.citations.length > 0 && !processedText.includes('[')) {
+        console.log(`Adding ${item.citations.length} direct citations to block ${index}`);
         const directCitations = item.citations.map(citation => {
           // Use same smart title logic for direct citations
           let displayTitle = citation.title;
@@ -369,6 +394,7 @@ function cleanClaudeContent(content) {
       // Check if next item is also text - if not, finalize current block
       const nextItem = content[index + 1];
       if (!nextItem || nextItem.type !== 'text') {
+        console.log(`Finalizing text block, total length: ${currentTextBlock.length}`);
         processedContent.push({
           type: 'text',
           text: currentTextBlock.trim()
@@ -385,12 +411,14 @@ function cleanClaudeContent(content) {
   
   // Handle any remaining text block
   if (currentTextBlock.trim()) {
+    console.log(`Adding final text block, length: ${currentTextBlock.length}`);
     processedContent.push({
       type: 'text',
       text: currentTextBlock.trim()
     });
   }
   
+  console.log(`Content cleaning complete: ${content.length} → ${processedContent.length} items`);
   return processedContent;
 }
 
