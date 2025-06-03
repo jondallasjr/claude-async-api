@@ -155,7 +155,10 @@ export default async function handler(req, res) {
 function cleanClaudeResponse(claudeResponse) {
   // Deep clone to avoid mutating original
   const cleaned = JSON.parse(JSON.stringify(claudeResponse));
-  
+
+  // Build a citation map from search results for later reference
+  const citationMap = buildCitationMap(cleaned.content);
+
   // Clean up content array
   if (cleaned.content && Array.isArray(cleaned.content)) {
     cleaned.content = cleaned.content.map(item => {
@@ -166,50 +169,140 @@ function cleanClaudeResponse(claudeResponse) {
           input: item.input
         };
       }
-      
+
       if (item.type === 'web_search_tool_result' && item.content) {
-        // Remove tool_use_id if present
+        // Remove tool_use_id if present, keep search results for citation mapping
         const cleaned = { ...item };
         delete cleaned.tool_use_id;
         return {
           ...cleaned,
-          content: item.content.map(result => ({
+          content: item.content.map((result, index) => ({
             url: result.url,
             title: result.title,
-            page_age: result.page_age
+            page_age: result.page_age,
+            // Add index for citation mapping
+            _citation_index: index
           }))
         };
       }
-      
-      if (item.type === 'text' && item.citations) {
-        // Clean up citations
+
+      if (item.type === 'text') {
+        // Process citations and convert <cite> tags to readable format
+        let processedText = item.text;
+
+        if (processedText && processedText.includes('<cite')) {
+          processedText = replaceCiteTags(processedText, citationMap);
+        }
+
         return {
           ...item,
-          citations: item.citations.map(citation => ({
+          text: processedText,
+          // Keep minimal citation data if it exists
+          citations: item.citations ? item.citations.map(citation => ({
             url: citation.url,
             title: citation.title,
             cited_text: citation.cited_text
-            // Remove: encrypted_index, type
-          }))
+            // Remove: encrypted_index, type, encrypted_content
+          })) : undefined
         };
       }
-      
+
       return item;
     });
   }
-  
+
   // Remove unnecessary top-level fields
   delete cleaned.role;
-  delete cleaned.type; 
+  delete cleaned.type;
   delete cleaned.stop_sequence;
   delete cleaned.stop_reason;
-  
+
   return cleaned;
+}
+
+function buildCitationMap(content) {
+  const citationMap = new Map();
+  let searchResultIndex = 0;
+
+  if (!content || !Array.isArray(content)) return citationMap;
+
+  content.forEach(item => {
+    if (item.type === 'web_search_tool_result' && item.content) {
+      item.content.forEach((result, resultIndex) => {
+        // Map search result index to citation info
+        const key = `${searchResultIndex}-${resultIndex}`;
+        citationMap.set(key, {
+          url: result.url,
+          title: result.title,
+          page_age: result.page_age
+        });
+      });
+      searchResultIndex++;
+    }
+  });
+
+  return citationMap;
+}
+
+function replaceCiteTags(text, citationMap) {
+  // Pattern to match <cite index="...">...</cite> tags
+  const citePattern = /<cite index="([^"]+)">(.*?)<\/cite>/g;
+
+  return text.replace(citePattern, (match, indexStr, citedText) => {
+    // Parse index string (could be "1-2" or "1-2,3-4" for multiple sources)
+    const indices = indexStr.split(',').map(idx => idx.trim());
+
+    // Build citation references
+    const citations = indices.map(index => {
+      const citation = citationMap.get(index);
+      if (citation) {
+        return `[${citation.title}](${citation.url})`;
+      }
+      return `[Source ${index}]`; // Fallback if citation not found
+    });
+
+    // Return the cited text with inline citation(s)
+    if (citations.length === 1) {
+      return `${citedText} ${citations[0]}`;
+    } else {
+      return `${citedText} (Sources: ${citations.join(', ')})`;
+    }
+  });
+}
+
+// Alternative: Convert to footnote style instead of inline
+function replaceCiteTagsWithFootnotes(text, citationMap) {
+  const citePattern = /<cite index="([^"]+)">(.*?)<\/cite>/g;
+  const footnotes = [];
+  let footnoteCounter = 1;
+
+  const processedText = text.replace(citePattern, (match, indexStr, citedText) => {
+    const indices = indexStr.split(',').map(idx => idx.trim());
+
+    const footnoteRefs = indices.map(index => {
+      const citation = citationMap.get(index);
+      if (citation) {
+        footnotes.push(`[${footnoteCounter}] ${citation.title} - ${citation.url}`);
+        return `[${footnoteCounter++}]`;
+      }
+      footnotes.push(`[${footnoteCounter}] Source ${index}`);
+      return `[${footnoteCounter++}]`;
+    });
+
+    return `${citedText}${footnoteRefs.join('')}`;
+  });
+
+  // Append footnotes at the end if any were found
+  if (footnotes.length > 0) {
+    return `${processedText}\n\n## References\n${footnotes.join('\n')}`;
+  }
+
+  return processedText;
 }
 
 async function callClaudeAPI(payload) {
   // Extract the pre-built Claude request and metadata
-  const { 
+  const {
     claudeRequest,     // Complete Claude API request from Pack
     userApiKey
   } = payload;
@@ -220,13 +313,13 @@ async function callClaudeAPI(payload) {
 
   // Use system API key (until Pack auth is fixed)
   const apiKey = process.env.ANTHROPIC_API_KEY;
-  
+
   if (!apiKey) {
     throw new Error('No system API key configured');
   }
-  
+
   console.log('Sending request to Claude API:', JSON.stringify(claudeRequest, null, 2));
-  
+
   // Send the request exactly as built by the Pack
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -247,9 +340,9 @@ async function callClaudeAPI(payload) {
 }
 
 function processClaudeResponse(claudeResponse, requestPayload) {
-  const { modelPricing } = requestPayload;
+  const { modelPricing, responseOptions } = requestPayload;
 
-  // Clean the response first
+  // Clean the response first (now handles citations properly)
   const cleanedResponse = cleanClaudeResponse(claudeResponse);
 
   // Start with cleaned Claude response
