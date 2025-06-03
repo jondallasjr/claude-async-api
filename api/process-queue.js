@@ -202,24 +202,34 @@ function buildSearchResultMap(content) {
   
   console.log(`Building search result map from ${content.length} content items`);
   
-  content.forEach(item => {
+  content.forEach((item, itemIndex) => {
     if (item.type === 'web_search_tool_result' && item.content) {
-      console.log(`Processing search result #${searchIndex} with ${item.content.length} results`);
+      console.log(`Processing search result #${searchIndex} (item ${itemIndex}) with ${item.content.length} results`);
       item.content.forEach((result, resultIndex) => {
-        const key = `${searchIndex}-${resultIndex}`;
-        searchResults.set(key, {
-          url: result.url,
-          title: result.title,
-          page_age: result.page_age
+        // Try multiple indexing schemes to match Claude's citations
+        const possibleKeys = [
+          `${searchIndex}-${resultIndex}`,     // Our original: 0-0, 0-1, etc.
+          `${itemIndex}-${resultIndex}`,       // Item index: might be 2-0, 4-1, etc.
+          `${resultIndex}`,                    // Just result index: 0, 1, 2, etc.
+          `${itemIndex}`,                      // Just item index: 2, 4, 6, etc.
+        ];
+        
+        possibleKeys.forEach(key => {
+          searchResults.set(key, {
+            url: result.url,
+            title: result.title,
+            page_age: result.page_age
+          });
         });
-        console.log(`Mapped citation key "${key}" to: ${result.title}`);
+        
+        console.log(`Mapped citation keys [${possibleKeys.join(', ')}] to: ${result.title}`);
       });
       searchIndex++;
     }
   });
   
   console.log(`Built search result map with ${searchResults.size} entries`);
-  console.log('Available citation keys:', Array.from(searchResults.keys()));
+  console.log('Available citation keys:', Array.from(searchResults.keys()).slice(0, 20)); // Show first 20
   return searchResults;
 }
 
@@ -229,12 +239,27 @@ function buildSearchResultMap(content) {
 function convertCitationsToMarkdown(text, searchResults) {
   if (!text || typeof text !== 'string') return text;
   
+  console.log(`Starting citation conversion on ${text.length} chars of text`);
+  console.log('Search results available:', searchResults.size);
+  
+  // First, let's see what citation indices Claude is actually using
+  const citeMatches = text.match(/<cite index="(.*?)">/g);
+  if (citeMatches) {
+    console.log(`Found ${citeMatches.length} citation tags:`);
+    citeMatches.forEach((match, i) => {
+      const indexMatch = match.match(/index="(.*?)"/);
+      if (indexMatch) {
+        console.log(`  Citation ${i + 1}: indices="${indexMatch[1]}"`);
+      }
+    });
+  }
+  
   // Convert <cite index="X-Y">content</cite> to content (Title1, Title2)
-  return text.replace(/<cite index="(.*?)">(.*?)<\/antml:cite>/g, (match, indexStr, citedText) => {
+  const converted = text.replace(/<cite index="(.*?)">(.*?)<\/antml:cite>/g, (match, indexStr, citedText) => {
     const indices = indexStr.split(',').map(idx => idx.trim());
     const citations = [];
     
-    console.log(`Processing citation with indices: ${indexStr}`);
+    console.log(`Processing citation with indices: [${indices.join(', ')}]`);
     
     indices.forEach(index => {
       const source = searchResults.get(index);
@@ -271,18 +296,27 @@ function convertCitationsToMarkdown(text, searchResults) {
         }
         
         citations.push(`[${displayTitle}](${source.url})`);
-        console.log(`Mapped index ${index} to: ${displayTitle}`);
+        console.log(`  ✓ Mapped index "${index}" to: ${displayTitle}`);
       } else {
-        console.warn(`Missing source for citation index: ${index}`);
+        console.warn(`  ✗ Missing source for citation index: "${index}"`);
+        console.log(`    Available keys sample:`, Array.from(searchResults.keys()).slice(0, 10));
         citations.push(`[Source ${index}](#)`);
       }
     });
     
     // Return cited text followed by citations in parentheses
-    return citations.length > 0 
+    const result = citations.length > 0 
       ? `${citedText} (${citations.join(', ')})`
       : citedText;
+    
+    console.log(`  Citation result: "${citedText}" → "${result}"`);
+    return result;
   });
+  
+  const conversionHappened = converted !== text;
+  console.log(`Citation conversion ${conversionHappened ? 'SUCCESS' : 'FAILED'}`);
+  
+  return converted;
 }
 
 /**
