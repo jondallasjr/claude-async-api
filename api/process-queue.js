@@ -224,7 +224,7 @@ function buildSearchResultMap(content) {
 function convertCitationsToMarkdown(text, searchResults) {
   if (!text || typeof text !== 'string') return text;
   
-  // Convert content to content [Title](URL)
+  // Convert <cite index="X-Y">content</cite> to content [Title](URL)
   return text.replace(/(.*?)<\/antml:cite>/g, (match, indexStr, citedText) => {
     const indices = indexStr.split(',').map(idx => idx.trim());
     const citations = [];
@@ -232,7 +232,11 @@ function convertCitationsToMarkdown(text, searchResults) {
     indices.forEach(index => {
       const source = searchResults.get(index);
       if (source) {
-        citations.push(`[${source.title}](${source.url})`);
+        // Truncate long titles for cleaner inline citations
+        const shortTitle = source.title.length > 50 
+          ? source.title.substring(0, 47) + '...' 
+          : source.title;
+        citations.push(`[${shortTitle}](${source.url})`);
       } else {
         console.warn(`Missing source for citation index: ${index}`);
         citations.push(`[Source ${index}](#)`);
@@ -240,7 +244,9 @@ function convertCitationsToMarkdown(text, searchResults) {
     });
     
     // Return cited text followed by citations
-    return `${citedText} ${citations.join(', ')}`;
+    return citations.length > 0 
+      ? `${citedText} ${citations.join(', ')}`
+      : citedText;
   });
 }
 
@@ -251,11 +257,15 @@ function cleanClaudeContent(content) {
   if (!Array.isArray(content)) return content;
   
   const searchResults = buildSearchResultMap(content);
+  const processedContent = [];
   
-  return content.map(item => {
+  // First pass: collect and merge text blocks
+  let currentTextBlock = '';
+  
+  content.forEach((item, index) => {
     // Clean web search tool results - remove massive encrypted content
     if (item.type === 'web_search_tool_result') {
-      return {
+      processedContent.push({
         type: item.type,
         content: item.content?.map(result => ({
           type: result.type,
@@ -264,42 +274,64 @@ function cleanClaudeContent(content) {
           page_age: result.page_age
           // Remove encrypted_content (massive field)
         })) || []
-      };
-    }
-    
-    // Clean text blocks with citations
-    if (item.type === 'text') {
-      const cleaned = {
-        type: item.type,
-        text: convertCitationsToMarkdown(item.text, searchResults)
-      };
-      
-      // Add direct citations if present (cleaned)
-      if (item.citations && item.citations.length > 0) {
-        cleaned.citations = item.citations.map(citation => ({
-          cited_text: citation.cited_text,
-          url: citation.url,
-          title: citation.title
-          // Remove encrypted_index (large field)
-        }));
-      }
-      
-      return cleaned;
+      });
+      return;
     }
     
     // Keep server tool use as-is but remove tool_use_id
     if (item.type === 'server_tool_use') {
-      return {
+      processedContent.push({
         type: item.type,
         name: item.name,
         input: item.input
         // Remove tool_use_id
-      };
+      });
+      return;
     }
     
-    // Keep other content types as-is
-    return item;
+    // Handle text blocks with smart merging
+    if (item.type === 'text') {
+      let processedText = convertCitationsToMarkdown(item.text, searchResults);
+      
+      // Add direct citations if present (but prefer inline citations)
+      if (item.citations && item.citations.length > 0 && !processedText.includes('[')) {
+        const directCitations = item.citations.map(citation => {
+          const shortTitle = citation.title.length > 50 
+            ? citation.title.substring(0, 47) + '...' 
+            : citation.title;
+          return `[${shortTitle}](${citation.url})`;
+        });
+        processedText += ` ${directCitations.join(', ')}`;
+      }
+      
+      currentTextBlock += processedText;
+      
+      // Check if next item is also text - if not, finalize current block
+      const nextItem = content[index + 1];
+      if (!nextItem || nextItem.type !== 'text') {
+        processedContent.push({
+          type: 'text',
+          text: currentTextBlock.trim()
+        });
+        currentTextBlock = '';
+      }
+      
+      return;
+    }
+    
+    // Keep other content types as-is (like thinking)
+    processedContent.push(item);
   });
+  
+  // Handle any remaining text block
+  if (currentTextBlock.trim()) {
+    processedContent.push({
+      type: 'text',
+      text: currentTextBlock.trim()
+    });
+  }
+  
+  return processedContent;
 }
 
 function processClaudeResponse(claudeResponse, requestPayload) {
