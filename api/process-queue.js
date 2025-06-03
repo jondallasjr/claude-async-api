@@ -200,8 +200,11 @@ function buildSearchResultMap(content) {
   
   if (!Array.isArray(content)) return searchResults;
   
+  console.log(`Building search result map from ${content.length} content items`);
+  
   content.forEach(item => {
     if (item.type === 'web_search_tool_result' && item.content) {
+      console.log(`Processing search result #${searchIndex} with ${item.content.length} results`);
       item.content.forEach((result, resultIndex) => {
         const key = `${searchIndex}-${resultIndex}`;
         searchResults.set(key, {
@@ -209,13 +212,14 @@ function buildSearchResultMap(content) {
           title: result.title,
           page_age: result.page_age
         });
-        console.log(`Mapped citation index ${key} to: ${result.title}`);
+        console.log(`Mapped citation key "${key}" to: ${result.title}`);
       });
       searchIndex++;
     }
   });
   
-  console.log(`Built search result map with ${searchResults.size} entries for citation conversion`);
+  console.log(`Built search result map with ${searchResults.size} entries`);
+  console.log('Available citation keys:', Array.from(searchResults.keys()));
   return searchResults;
 }
 
@@ -225,16 +229,12 @@ function buildSearchResultMap(content) {
 function convertCitationsToMarkdown(text, searchResults) {
   if (!text || typeof text !== 'string') return text;
   
-  // Log for debugging
-  console.log(`Processing text with ${text.split('<cite').length - 1} citation tags`);
-  console.log(`Available search results: ${Array.from(searchResults.keys()).join(', ')}`);
-  
-  // Convert <cite index="X-Y">content</cite> to content [Title](URL)
-  return text.replace(/<cite index="([^"]*)">(.*?)<\/cite>/g, (match, indexStr, citedText) => {
+  // Convert <cite index="X-Y">content</cite> to content (Title1, Title2)
+  return text.replace(/<cite index="(.*?)">(.*?)<\/antml:cite>/g, (match, indexStr, citedText) => {
     const indices = indexStr.split(',').map(idx => idx.trim());
     const citations = [];
     
-    console.log(`Processing citation with indices: ${indices.join(', ')}`);
+    console.log(`Processing citation with indices: ${indexStr}`);
     
     indices.forEach(index => {
       const source = searchResults.get(index);
@@ -271,18 +271,17 @@ function convertCitationsToMarkdown(text, searchResults) {
         }
         
         citations.push(`[${displayTitle}](${source.url})`);
-        console.log(`Successfully mapped index ${index} to: ${displayTitle}`);
+        console.log(`Mapped index ${index} to: ${displayTitle}`);
       } else {
         console.warn(`Missing source for citation index: ${index}`);
-        // Instead of showing broken citations, just return the cited text without citation
-        // This handles cases where citations reference sources not in current search
+        citations.push(`[Source ${index}](#)`);
       }
     });
     
-    // Return cited text followed by citations in parentheses (only if we found valid citations)
+    // Return cited text followed by citations in parentheses
     return citations.length > 0 
       ? `${citedText} (${citations.join(', ')})`
-      : citedText; // Just return the cited text if no valid sources found
+      : citedText;
   });
 }
 
@@ -328,13 +327,6 @@ function cleanClaudeContent(content) {
     // Handle text blocks with smart merging
     if (item.type === 'text') {
       let processedText = convertCitationsToMarkdown(item.text, searchResults);
-      
-      // If no citations were converted but cite tags exist, clean them up
-      if (processedText.includes('<cite') && !processedText.includes('](')) {
-        console.log('Cleaning up unconverted cite tags');
-        // Remove cite tags but keep the content
-        processedText = processedText.replace(/<cite[^>]*>(.*?)<\/cite>/g, '$1');
-      }
       
       // Add direct citations if present (but prefer inline citations)
       if (item.citations && item.citations.length > 0 && !processedText.includes('[')) {
