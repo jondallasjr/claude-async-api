@@ -232,20 +232,47 @@ function convertCitationsToMarkdown(text, searchResults) {
     indices.forEach(index => {
       const source = searchResults.get(index);
       if (source) {
-        // Truncate long titles for cleaner inline citations
-        const shortTitle = source.title.length > 50 
-          ? source.title.substring(0, 47) + '...' 
-          : source.title;
-        citations.push(`[${shortTitle}](${source.url})`);
+        // Smart title shortening - prefer meaningful truncation
+        let displayTitle = source.title;
+        
+        // For very long titles, try to extract meaningful part
+        if (displayTitle.length > 60) {
+          // Try to find a good breaking point before common separators
+          const breakPoints = [' - ', ' | ', ' — ', ': '];
+          let bestTitle = displayTitle;
+          
+          for (const breakPoint of breakPoints) {
+            const parts = displayTitle.split(breakPoint);
+            if (parts[0].length >= 20 && parts[0].length <= 50) {
+              bestTitle = parts[0];
+              break;
+            }
+          }
+          
+          // If still too long, truncate at word boundary
+          if (bestTitle.length > 50) {
+            const words = bestTitle.split(' ');
+            let truncated = '';
+            for (const word of words) {
+              if ((truncated + word).length > 45) break;
+              truncated += (truncated ? ' ' : '') + word;
+            }
+            bestTitle = truncated || bestTitle.substring(0, 45);
+          }
+          
+          displayTitle = bestTitle;
+        }
+        
+        citations.push(`[${displayTitle}](${source.url})`);
       } else {
         console.warn(`Missing source for citation index: ${index}`);
         citations.push(`[Source ${index}](#)`);
       }
     });
     
-    // Return cited text followed by citations
+    // Return cited text followed by citations in parentheses
     return citations.length > 0 
-      ? `${citedText} ${citations.join(', ')}`
+      ? `${citedText} (${citations.join(', ')})`
       : citedText;
   });
 }
@@ -296,12 +323,37 @@ function cleanClaudeContent(content) {
       // Add direct citations if present (but prefer inline citations)
       if (item.citations && item.citations.length > 0 && !processedText.includes('[')) {
         const directCitations = item.citations.map(citation => {
-          const shortTitle = citation.title.length > 50 
-            ? citation.title.substring(0, 47) + '...' 
-            : citation.title;
-          return `[${shortTitle}](${citation.url})`;
+          // Use same smart title logic for direct citations
+          let displayTitle = citation.title;
+          
+          if (displayTitle.length > 60) {
+            const breakPoints = [' - ', ' | ', ' — ', ': '];
+            let bestTitle = displayTitle;
+            
+            for (const breakPoint of breakPoints) {
+              const parts = displayTitle.split(breakPoint);
+              if (parts[0].length >= 20 && parts[0].length <= 50) {
+                bestTitle = parts[0];
+                break;
+              }
+            }
+            
+            if (bestTitle.length > 50) {
+              const words = bestTitle.split(' ');
+              let truncated = '';
+              for (const word of words) {
+                if ((truncated + word).length > 45) break;
+                truncated += (truncated ? ' ' : '') + word;
+              }
+              bestTitle = truncated || bestTitle.substring(0, 45);
+            }
+            
+            displayTitle = bestTitle;
+          }
+          
+          return `[${displayTitle}](${citation.url})`;
         });
-        processedText += ` ${directCitations.join(', ')}`;
+        processedText += ` (${directCitations.join(', ')})`;
       }
       
       currentTextBlock += processedText;
