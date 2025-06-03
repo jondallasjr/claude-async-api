@@ -147,9 +147,8 @@ export default async function handler(req, res) {
 }
 
 async function callClaudeAPI(payload) {
-  // Extract the pre-built Claude request and metadata
   const { 
-    claudeRequest,     // Complete Claude API request from Pack
+    claudeRequest,
     userApiKey
   } = payload;
 
@@ -157,13 +156,22 @@ async function callClaudeAPI(payload) {
     throw new Error('No claudeRequest found in payload - ensure Pack is sending complete request');
   }
 
-  // Use system API key (until Pack auth is fixed)
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  // Try user's API key first, fall back to system key
+  let apiKey = userApiKey;
+  let keySource = 'user';
   
-  if (!apiKey) {
-    throw new Error('No system API key configured');
+  // Check if user key looks valid (should be ~108 chars and start with sk-ant-api03-)
+  if (!apiKey || apiKey.length < 50 || !apiKey.startsWith('sk-ant-api03-')) {
+    console.log(`User API key invalid (${apiKey ? apiKey.length : 0} chars), falling back to system key`);
+    apiKey = process.env.ANTHROPIC_API_KEY;
+    keySource = 'system';
   }
   
+  if (!apiKey) {
+    throw new Error('No valid API key available (neither user nor system)');
+  }
+  
+  console.log(`Using ${keySource} API key (${apiKey.length} chars) for Claude API call`);
   console.log('Sending request to Claude API:', JSON.stringify(claudeRequest, null, 2));
   
   // Send the request exactly as built by the Pack
@@ -174,7 +182,7 @@ async function callClaudeAPI(payload) {
       'x-api-key': apiKey,
       'anthropic-version': '2023-06-01'
     },
-    body: JSON.stringify(claudeRequest)  // Send as-is from Pack!
+    body: JSON.stringify(claudeRequest)
   });
 
   if (!response.ok) {
