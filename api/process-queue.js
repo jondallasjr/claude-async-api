@@ -209,12 +209,13 @@ function buildSearchResultMap(content) {
           title: result.title,
           page_age: result.page_age
         });
+        console.log(`Mapped citation index ${key} to: ${result.title}`);
       });
       searchIndex++;
     }
   });
   
-  console.log(`Mapped ${searchResults.size} search results for citations`);
+  console.log(`Built search result map with ${searchResults.size} entries for citation conversion`);
   return searchResults;
 }
 
@@ -224,10 +225,16 @@ function buildSearchResultMap(content) {
 function convertCitationsToMarkdown(text, searchResults) {
   if (!text || typeof text !== 'string') return text;
   
+  // Log for debugging
+  console.log(`Processing text with ${text.split('<cite').length - 1} citation tags`);
+  console.log(`Available search results: ${Array.from(searchResults.keys()).join(', ')}`);
+  
   // Convert <cite index="X-Y">content</cite> to content [Title](URL)
-  return text.replace(/(.*?)<\/antml:cite>/g, (match, indexStr, citedText) => {
+  return text.replace(/<cite index="([^"]*)">(.*?)<\/cite>/g, (match, indexStr, citedText) => {
     const indices = indexStr.split(',').map(idx => idx.trim());
     const citations = [];
+    
+    console.log(`Processing citation with indices: ${indices.join(', ')}`);
     
     indices.forEach(index => {
       const source = searchResults.get(index);
@@ -264,16 +271,18 @@ function convertCitationsToMarkdown(text, searchResults) {
         }
         
         citations.push(`[${displayTitle}](${source.url})`);
+        console.log(`Successfully mapped index ${index} to: ${displayTitle}`);
       } else {
         console.warn(`Missing source for citation index: ${index}`);
-        citations.push(`[Source ${index}](#)`);
+        // Instead of showing broken citations, just return the cited text without citation
+        // This handles cases where citations reference sources not in current search
       }
     });
     
-    // Return cited text followed by citations in parentheses
+    // Return cited text followed by citations in parentheses (only if we found valid citations)
     return citations.length > 0 
       ? `${citedText} (${citations.join(', ')})`
-      : citedText;
+      : citedText; // Just return the cited text if no valid sources found
   });
 }
 
@@ -319,6 +328,13 @@ function cleanClaudeContent(content) {
     // Handle text blocks with smart merging
     if (item.type === 'text') {
       let processedText = convertCitationsToMarkdown(item.text, searchResults);
+      
+      // If no citations were converted but cite tags exist, clean them up
+      if (processedText.includes('<cite') && !processedText.includes('](')) {
+        console.log('Cleaning up unconverted cite tags');
+        // Remove cite tags but keep the content
+        processedText = processedText.replace(/<cite[^>]*>(.*?)<\/cite>/g, '$1');
+      }
       
       // Add direct citations if present (but prefer inline citations)
       if (item.citations && item.citations.length > 0 && !processedText.includes('[')) {
