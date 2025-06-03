@@ -186,43 +186,16 @@ async function callClaudeAPI(payload) {
 }
 
 function processClaudeResponse(claudeResponse, requestPayload) {
-  const { responseOptions = {}, modelPricing } = requestPayload;
-  const { jsonMode = false, extendedThinking = false, includeThinking = false } = responseOptions;
+  const { modelPricing } = requestPayload;
 
-  // Extract content
-  let content;
-  let thinking = null;
-
-  if (extendedThinking) {
-    // Extract thinking if requested
-    if (includeThinking) {
-      const thinkingBlock = claudeResponse.content?.find(block => block.type === "thinking");
-      if (thinkingBlock) {
-        thinking = thinkingBlock.content;
-      }
-    }
-
-    const textBlock = claudeResponse.content?.find(block => block.type === "text");
-    content = textBlock?.text || '';
-  } else {
-    content = claudeResponse.content?.[0]?.text || '';
-  }
-
-  // Build response for Pack
+  // Start with Claude's raw response
   const response = {
+    ...claudeResponse,  // Everything from Claude as-is
     requestId: requestPayload.requestId,
-    content,
-    model: requestPayload.claudeRequest?.model || 'claude-sonnet-4-0',
-    usage: claudeResponse.usage,
     completedAt: new Date().toISOString()
   };
 
-  // Include thinking if it was requested and available
-  if (thinking) {
-    response.thinking = thinking;
-  }
-
-  // Calculate and include cost when pricing is available
+  // Only add cost calculation
   if (modelPricing && claudeResponse.usage) {
     const { input_tokens, output_tokens } = claudeResponse.usage;
     const inputCost = (input_tokens / 1000000) * modelPricing.input;

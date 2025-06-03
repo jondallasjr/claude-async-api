@@ -1,7 +1,15 @@
 // =================================================================
-// DEV NOTES for api/queue-request.js (Updated 2025-05-31)
+// DEV NOTES for api/queue-request.js (Updated 2025-06-03)
 // =================================================================
 /*
+
+Simplify Vercel response processing - return raw Claude response (2025-06-03)
+- Removed complex response processing: No more content extraction, thinking handling, or custom formatting
+- Raw Claude response: Return complete Claude API response as-is with only cost calculation added
+- Fixes web search: Empty content issue resolved - all tool results, citations, and search data now preserved
+- Future-proof: Any new Claude API response formats automatically supported
+- Simpler code: Vercel becomes pure proxy + cost calculator, no response manipulation
+
 ROLE IN NEW ARCHITECTURE:
 - Receives request payload from Pack
 - Stores complete payload in Supabase for processing
