@@ -252,6 +252,9 @@ function convertCitationsToMarkdown(text, searchResults) {
         console.log(`  Citation ${i + 1}: indices="${indexMatch[1]}"`);
       }
     });
+  } else {
+    console.log('No citation tags found in text');
+    return text;
   }
   
   // Convert <cite index="X-Y">content</cite> to content (Title1, Title2)
@@ -309,7 +312,7 @@ function convertCitationsToMarkdown(text, searchResults) {
       ? `${citedText} (${citations.join(', ')})`
       : citedText;
     
-    console.log(`  Citation result: "${citedText}" → "${result}"`);
+    console.log(`  Citation result: "${citedText.substring(0, 50)}..." → "${result.substring(0, 100)}..."`);
     return result;
   });
   
