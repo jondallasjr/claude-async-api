@@ -374,9 +374,34 @@ function cleanClaudeContent(content) {
       
       let processedText = item.text;
       
-      // Check if text contains citations
-      if (processedText && processedText.includes('<cite index=')) {
-        console.log(`Found citations in text block ${index}, processing...`);
+      // Check if text contains JSON with artifacts that might have citations
+      let jsonProcessed = false;
+      if (processedText && processedText.includes('```json')) {
+        console.log(`Found JSON block in text, checking for citations...`);
+        
+        // Extract and process JSON content
+        processedText = processedText.replace(/```json\s*([\s\S]*?)\s*```/g, (match, jsonContent) => {
+          try {
+            const jsonObj = JSON.parse(jsonContent.trim());
+            
+            // Process citations in JSON artifacts
+            if (jsonObj.artifact && typeof jsonObj.artifact === 'string') {
+              console.log(`Processing citations in artifact field...`);
+              jsonObj.artifact = convertCitationsToMarkdown(jsonObj.artifact, searchResults);
+              jsonProcessed = true;
+            }
+            
+            return '```json\n' + JSON.stringify(jsonObj, null, 2) + '\n```';
+          } catch (e) {
+            console.warn(`Failed to parse JSON in text block: ${e.message}`);
+            return match; // Return original if parsing fails
+          }
+        });
+      }
+      
+      // Check if regular text contains citations (fallback)
+      if (!jsonProcessed && processedText && processedText.includes('<cite index=')) {
+        console.log(`Found citations in regular text block ${index}, processing...`);
         const originalLength = processedText.length;
         processedText = convertCitationsToMarkdown(processedText, searchResults);
         console.log(`Citation conversion: ${originalLength} → ${processedText.length} chars`);
@@ -385,7 +410,7 @@ function cleanClaudeContent(content) {
         if (processedText.includes('<cite index=')) {
           console.warn(`Citations still present after conversion in block ${index}`);
         }
-      } else {
+      } else if (!jsonProcessed) {
         console.log(`No citations found in text block ${index}`);
       }
       
