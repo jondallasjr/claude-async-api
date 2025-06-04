@@ -114,7 +114,7 @@ export default async function handler(req, res) {
     console.log(`Claude completed for ${requestId}`);
 
     // Process response for Pack consumption
-    const processedResponse = processClaudeResponse(claudeResponse, request.request_payload);
+    const processedResponse = processClaudeResponseWithSizeControl(claudeResponse, request.request_payload);
 
     console.log('Processed response:', JSON.stringify(processedResponse, null, 2));
 
@@ -188,12 +188,9 @@ async function callClaudeAPI(payload) {
 function processClaudeResponse(claudeResponse, requestPayload) {
   const { modelPricing } = requestPayload;
 
-  // Deep clean the response to remove encrypted content while preserving citations
-  const cleanedResponse = deepCleanResponse(claudeResponse);
-
-  // Start with cleaned Claude response
+  // Start with Claude's raw response (no cleaning by default)
   const response = {
-    ...cleanedResponse,
+    ...claudeResponse,
     requestId: requestPayload.requestId,
     completedAt: new Date().toISOString()
   };
@@ -258,4 +255,137 @@ function deepCleanResponse(obj) {
   }
   
   return cleaned;
+}
+
+// Alternative more aggressive cleaning function if 50k limit is still exceeded
+function aggressiveCleanResponse(obj) {
+  if (obj === null || typeof obj !== 'object') {
+    return obj;
+  }
+
+  if (Array.isArray(obj)) {
+    return obj.map(item => aggressiveCleanResponse(item));
+  }
+
+  const cleaned = {};
+  
+  for (const [key, value] of Object.entries(obj)) {
+    // Remove all encrypted fields
+    if (key === 'encrypted_content' || key === 'encrypted_index') {
+      continue;
+    }
+    
+    // For web_search_tool_result content, keep only essential results
+    if (key === 'content' && obj.type === 'web_search_tool_result') {
+      // Limit to first 10 search results to control size
+      if (Array.isArray(value)) {
+        cleaned[key] = value.slice(0, 10).map(item => aggressiveCleanResponse(item));
+      } else {
+        cleaned[key] = aggressiveCleanResponse(value);
+      }
+      continue;
+    }
+    
+    // For web_search_result, keep minimal data
+    if (obj.type === 'web_search_result') {
+      if (['type', 'title', 'url'].includes(key)) {
+        cleaned[key] = value;
+      }
+      continue;
+    }
+    
+    // For citations, keep essential data only
+    if (obj.type === 'web_search_result_location') {
+      if (['type', 'cited_text', 'url', 'title'].includes(key)) {
+        cleaned[key] = value;
+      }
+      continue;
+    }
+    
+    // Recursively clean other objects
+    cleaned[key] = aggressiveCleanResponse(value);
+  }
+  
+  return cleaned;
+}
+
+// Usage in process-queue.js - replace the existing processClaudeResponse function with above
+// You can also add a size check and use aggressiveCleanResponse if needed:
+
+function processClaudeResponseWithSizeControl(claudeResponse, requestPayload) {
+  const { modelPricing, responseOptions } = requestPayload;
+
+  let finalResponse = claudeResponse;
+  const processingLog = [];
+
+  // Calculate original size
+  const originalSize = JSON.stringify(claudeResponse).length;
+  processingLog.push(`Original response size: ${originalSize} characters`);
+
+  // Only apply cleaning if web search was enabled
+  if (responseOptions?.webSearch) {
+    processingLog.push('Web search detected, applying response cleaning...');
+    console.log('Web search detected, applying response cleaning...');
+    
+    // Try normal cleaning first
+    let cleanedResponse = deepCleanResponse(claudeResponse);
+    
+    // Check size - if still too large, use aggressive cleaning
+    const responseSize = JSON.stringify(cleanedResponse).length;
+    processingLog.push(`Response size after standard cleaning: ${responseSize} characters (${Math.round((originalSize - responseSize) / originalSize * 100)}% reduction)`);
+    console.log(`Response size after cleaning: ${responseSize} characters`);
+    
+    if (responseSize > 45000) { // Leave some buffer under 50k limit
+      processingLog.push('Response still too large, applying aggressive cleaning...');
+      console.log('Response still too large, applying aggressive cleaning...');
+      cleanedResponse = aggressiveCleanResponse(claudeResponse);
+      const newSize = JSON.stringify(cleanedResponse).length;
+      processingLog.push(`Response size after aggressive cleaning: ${newSize} characters (${Math.round((originalSize - newSize) / originalSize * 100)}% total reduction)`);
+      console.log(`Response size after aggressive cleaning: ${newSize} characters`);
+    }
+    
+    finalResponse = cleanedResponse;
+  } else {
+    processingLog.push('No web search used, skipping response cleaning');
+    console.log('No web search used, skipping response cleaning');
+  }
+
+  // Calculate final size
+  const finalSize = JSON.stringify(finalResponse).length;
+  processingLog.push(`Final response size: ${finalSize} characters`);
+
+  // Build final response
+  const response = {
+    ...finalResponse,
+    requestId: requestPayload.requestId,
+    completedAt: new Date().toISOString(),
+    _processingInfo: {
+      webSearchEnabled: !!responseOptions?.webSearch,
+      cleaningApplied: !!responseOptions?.webSearch,
+      originalSizeChars: originalSize,
+      finalSizeChars: finalSize,
+      sizeReductionPercent: responseOptions?.webSearch ? Math.round((originalSize - finalSize) / originalSize * 100) : 0,
+      processingLog: processingLog,
+      timestamp: new Date().toISOString()
+    }
+  };
+
+  // Add cost calculation
+  if (modelPricing && claudeResponse.usage) {
+    const { input_tokens, output_tokens } = claudeResponse.usage;
+    const inputCost = (input_tokens / 1000000) * modelPricing.input;
+    const outputCost = (output_tokens / 1000000) * modelPricing.output;
+
+    response.cost = {
+      model: requestPayload.claudeRequest?.model || 'claude-sonnet-4-0',
+      inputTokens: input_tokens,
+      outputTokens: output_tokens,
+      inputCost: parseFloat(inputCost.toFixed(6)),
+      outputCost: parseFloat(outputCost.toFixed(6)),
+      totalCost: parseFloat((inputCost + outputCost).toFixed(6)),
+      currency: 'USD'
+    };
+  }
+
+  return response;
 }
