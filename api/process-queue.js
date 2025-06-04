@@ -487,17 +487,17 @@ function cleanClaudeContent(content) {
 function processClaudeResponse(claudeResponse, requestPayload) {
   const { modelPricing } = requestPayload;
 
-  // Start with essential fields only (remove bloat)
+  // Deep clean the response to remove encrypted content while preserving citations
+  const cleanedResponse = deepCleanResponse(claudeResponse);
+
+  // Start with cleaned Claude response
   const response = {
-    id: claudeResponse.id,
-    model: claudeResponse.model,
-    content: cleanClaudeContent(claudeResponse.content),
-    usage: claudeResponse.usage,
+    ...cleanedResponse,
     requestId: requestPayload.requestId,
     completedAt: new Date().toISOString()
   };
 
-  // Add cost calculation
+  // Only add cost calculation
   if (modelPricing && claudeResponse.usage) {
     const { input_tokens, output_tokens } = claudeResponse.usage;
     const inputCost = (input_tokens / 1000000) * modelPricing.input;
@@ -514,11 +514,99 @@ function processClaudeResponse(claudeResponse, requestPayload) {
     };
   }
 
-  // Log size reduction
-  const originalSize = JSON.stringify(claudeResponse).length;
-  const cleanedSize = JSON.stringify(response).length;
-  const reduction = ((originalSize - cleanedSize) / originalSize * 100).toFixed(1);
-  console.log(`Payload size reduced by ${reduction}% (${originalSize} → ${cleanedSize} bytes)`);
-
   return response;
+}
+
+function deepCleanResponse(obj) {
+  if (obj === null || typeof obj !== 'object') {
+    return obj;
+  }
+
+  if (Array.isArray(obj)) {
+    return obj.map(item => deepCleanResponse(item));
+  }
+
+  const cleaned = {};
+  
+  for (const [key, value] of Object.entries(obj)) {
+    // Remove encrypted fields that consume massive space
+    if (key === 'encrypted_content' || key === 'encrypted_index') {
+      continue;
+    }
+    
+    // For web_search_result objects, keep only essential metadata
+    if (obj.type === 'web_search_result') {
+      // Keep only: type, title, url, page_age (remove encrypted_content)
+      if (['type', 'title', 'url', 'page_age'].includes(key)) {
+        cleaned[key] = value;
+      }
+      continue;
+    }
+    
+    // For citation objects, preserve all fields except encrypted_index
+    if (obj.type === 'web_search_result_location') {
+      // Keep: type, cited_text, url, title (remove encrypted_index)
+      if (['type', 'cited_text', 'url', 'title'].includes(key)) {
+        cleaned[key] = value;
+      }
+      continue;
+    }
+    
+    // For all other objects, recursively clean and preserve structure
+    cleaned[key] = deepCleanResponse(value);
+  }
+  
+  return cleaned;
+}
+
+// Alternative more aggressive cleaning function if 50k limit is still exceeded
+function aggressiveCleanResponse(obj) {
+  if (obj === null || typeof obj !== 'object') {
+    return obj;
+  }
+
+  if (Array.isArray(obj)) {
+    return obj.map(item => aggressiveCleanResponse(item));
+  }
+
+  const cleaned = {};
+  
+  for (const [key, value] of Object.entries(obj)) {
+    // Remove all encrypted fields
+    if (key === 'encrypted_content' || key === 'encrypted_index') {
+      continue;
+    }
+    
+    // For web_search_tool_result content, keep only essential results
+    if (key === 'content' && obj.type === 'web_search_tool_result') {
+      // Limit to first 10 search results to control size
+      if (Array.isArray(value)) {
+        cleaned[key] = value.slice(0, 10).map(item => aggressiveCleanResponse(item));
+      } else {
+        cleaned[key] = aggressiveCleanResponse(value);
+      }
+      continue;
+    }
+    
+    // For web_search_result, keep minimal data
+    if (obj.type === 'web_search_result') {
+      if (['type', 'title', 'url'].includes(key)) {
+        cleaned[key] = value;
+      }
+      continue;
+    }
+    
+    // For citations, keep essential data only
+    if (obj.type === 'web_search_result_location') {
+      if (['type', 'cited_text', 'url', 'title'].includes(key)) {
+        cleaned[key] = value;
+      }
+      continue;
+    }
+    
+    // Recursively clean other objects
+    cleaned[key] = aggressiveCleanResponse(value);
+  }
+  
+  return cleaned;
 }

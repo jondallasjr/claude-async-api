@@ -1,0 +1,471 @@
+CLAUDE WEB SEARCH RESPONSE
+Query: "What are the current #1 songs in 10 different countries?"
+Timestamp: 2025-06-03T18:44:05.998Z
+================================================================================
+
+📝 TEXT RESPONSE:
+I'll search for current chart-topping songs across different countries.
+
+🔧 TOOL USED: web_search
+📋 Search Query: "current number 1 song charts different countries global June 2025"
+
+🌐 SEARCH RESULTS (10 found):
+  1. Global Top 50 | 2025 Hits on Apple Music
+     URL: https://music.apple.com/us/playlist/global-top-50-2025-hits/pl.4ce56ad1659d490cb125ed4fd9bfb6c3
+     Last updated: 3 weeks ago
+
+  2. Billboard Hot 100™
+     URL: https://www.billboard.com/charts/hot-100/
+     Last updated: January 2, 2013
+
+  3. The songs of Basel 2025 hit the charts across the Globe
+     URL: https://eurovision.tv/story/songs-of-eurovision-2025-hit-charts
+     Last updated: 1 week ago
+
+  4. Billboard Hot 100: Every No. 1 song of 2025
+     URL: https://www.goldderby.com/feature/billboard-no-1-songs-2025-1206068780/
+     Last updated: 5 days ago
+
+  5. TOP 40 - May 31, 2025 | American Top 40
+     URL: https://www.americantop40.com/charts/top-40-238/latest/
+     Last updated: null
+
+  6. The Official biggest songs of 2025 so far | Official Charts
+     URL: https://www.officialcharts.com/chart-news/the-official-biggest-songs-of-2025-so-far/
+     Last updated: null
+
+  7. Billboard Global 200
+     URL: https://www.billboard.com/charts/billboard-global-200/
+     Last updated: July 19, 2024
+
+  8. List of Billboard Hot 100 number ones of 2025 - Wikipedia
+     URL: https://en.wikipedia.org/wiki/List_of_Billboard_Hot_100_number_ones_of_2025
+     Last updated: 1 day ago
+
+  9. iTunes Top 100 Songs Chart 2025
+     URL: https://www.popvortex.com/music/charts/top-100-songs.php
+     Last updated: null
+
+  10. Top 100: Global on Apple Music
+     URL: https://music.apple.com/us/playlist/top-100-global/pl.d25f5d1181894928af76c85c967f8f31
+     Last updated: 1 day ago
+
+📝 TEXT RESPONSE:
+
+
+Let me search for more current chart information from other countries.
+
+🔧 TOOL USED: web_search
+📋 Search Query: "current number 1 songs Japan South Korea China June 2025 charts"
+
+🌐 SEARCH RESULTS (10 found):
+  1. Top 200 South Korea
+     URL: https://www.shazam.com/charts/top-200/south-korea
+     Last updated: null
+
+  2. Circle Chart - Wikipedia
+     URL: https://en.wikipedia.org/wiki/Circle_Chart
+     Last updated: 2 days ago
+
+  3. Top Korean Daily Singles Chart
+     URL: https://kma.kkbox.com/charts/daily/song?terr=tw&lang=en&cate=314
+     Last updated: null
+
+  4. Billboard Japan Hot 100 - Wikipedia
+     URL: https://en.wikipedia.org/wiki/Billboard_Japan_Hot_100
+     Last updated: 1 day ago
+
+  5. The Top 40 J-POP songs - Week 01 of 2025 – OnlyHit Japan Charts | OnlyHit
+     URL: https://onlyhit.us/charts/japan-2025-01
+     Last updated: 3 weeks ago
+
+  6. South Korea’s snap presidential election 2025: All you need to know | Elections News | Al Jazeera
+     URL: https://www.aljazeera.com/news/2025/5/31/south-koreas-snap-presidential-election-2025-all-you-need-to-know
+     Last updated: 10 hours ago
+
+  7. SEVENTEEN, ATEEZ Tours Lead K-Pop's Best Midyear Boxscore Total
+     URL: https://www.billboard.com/lists/top-k-pop-artists-2025-midyear-boxscore-charts
+     Last updated: 1 day ago
+
+  8. 2024 K-Pop Artist 100 Ranked: BTS Jung Kook, Stray Kids, Fifty Fifty
+     URL: https://www.billboard.com/lists/k-pop-artist-100-list-2024-ranked/
+     Last updated: February 29, 2024
+
+  9. Billboard Japan Hot 100
+     URL: https://www.billboard.com/charts/japan-hot-100/
+     Last updated: August 2, 2024
+
+  10. The Official biggest songs of 2025 so far | Official Charts
+     URL: https://www.officialcharts.com/chart-news/the-official-biggest-songs-of-2025-so-far/
+     Last updated: null
+
+📝 TEXT RESPONSE:
+
+
+Based on the search results, I'll compile the current #1 songs in different countries:
+
+1. United States:
+
+
+📝 TEXT RESPONSE:
+The current #1 song on iTunes is "Ordinary" by Alex Warren
+
+📚 CITATIONS:
+  1. iTunes Top 100 Songs Chart 2025
+     URL: https://www.popvortex.com/music/charts/top-100-songs.php
+     Cited text: "Today the current #1 Song right now on iTunes is Ordinary by Alex Warren. "
+
+📝 TEXT RESPONSE:
+.
+
+2. United Kingdom:
+
+
+📝 TEXT RESPONSE:
+Messy by Lola Young is officially the UK's biggest song of 2025 so far, racking up 597,000 chart units in the first quarter of 2025
+
+📚 CITATIONS:
+  1. The Official biggest songs of 2025 so far | Official Charts
+     URL: https://www.officialcharts.com/chart-news/the-official-biggest-songs-of-2025-so-far/
+     Cited text: "Messy by Lola Young is officially the UK’s biggest song of 2025 so far. Racking up 597,000 chart units in the first quarter of 2025 alone (and 775,000..."
+
+📝 TEXT RESPONSE:
+.
+
+3. Japan:
+
+
+📝 TEXT RESPONSE:
+The current number-one on the Billboard Japan Hot 100 as of May 28, 2025, is "God_i" by Number_i
+
+📚 CITATIONS:
+  1. Billboard Japan Hot 100 - Wikipedia
+     URL: https://en.wikipedia.org/wiki/Billboard_Japan_Hot_100
+     Cited text: "The current number-one on the chart as of the issue dated May 28, 2025, is &quot;God_i&quot; by Number_i. "
+
+  2. Billboard Japan Hot 100 - Wikipedia
+     URL: https://en.wikipedia.org/wiki/Billboard_Japan_Hot_100
+     Cited text: "The current number-one on the chart as of the issue dated May 28, 2025, is "God_i" by Number_i. "
+
+📝 TEXT RESPONSE:
+.
+
+4. Germany:
+
+
+📝 TEXT RESPONSE:
+On Germany's official singles chart, "Baller" by Abor & Tynna is at number 3
+
+📚 CITATIONS:
+  1. The songs of Basel 2025 hit the charts across the Globe
+     URL: https://eurovision.tv/story/songs-of-eurovision-2025-hit-charts
+     Cited text: "· At the top end of Germany's official singles chart, Baller is the highest performing Eurovision song right up there at number 3."
+
+📝 TEXT RESPONSE:
+.
+
+5. South Korea:
+
+
+📝 TEXT RESPONSE:
+The current top song is "THUNDER" by SEVENTEEN
+
+📚 CITATIONS:
+  1. Top Korean Daily Singles Chart
+     URL: https://kma.kkbox.com/charts/daily/song?terr=tw&lang=en&cate=314
+     Cited text: "Check out who&#x27;s hot right now with charts of the most listened to songs on KKBOX: THUNDER - SEVENTEEN (세븐틴), Good Thing - i-dle, HOME SWEET HOME ..."
+
+📝 TEXT RESPONSE:
+.
+
+6. Lithuania:
+
+
+📝 TEXT RESPONSE:
+Lithuania has shown massive support for Eurovision songs, with 29 of the 37 songs placed on their official singles chart. The number 1 spot is held by "Baller" by Abor & Tynna
+
+📚 CITATIONS:
+  1. The songs of Basel 2025 hit the charts across the Globe
+     URL: https://eurovision.tv/story/songs-of-eurovision-2025-hit-charts
+     Cited text: "· But to date, there is no country's music-listening audience that has taken to the songs of the 69th Eurovision Song Contest quite like one... Lithua..."
+
+📝 TEXT RESPONSE:
+.
+
+7. Austria:
+
+
+📝 TEXT RESPONSE:
+JJ's "Wasted Love", which won the 69th Eurovision Song Contest, has impacted 29 different countries' streaming charts and reached number 1 in Austria, Luxembourg and Switzerland
+
+📚 CITATIONS:
+  1. The songs of Basel 2025 hit the charts across the Globe
+     URL: https://eurovision.tv/story/songs-of-eurovision-2025-hit-charts
+     Cited text: "Austria's JJ has won the 69th Eurovision Song Contest with his song Wasted Love ·"
+
+  2. The songs of Basel 2025 hit the charts across the Globe
+     URL: https://eurovision.tv/story/songs-of-eurovision-2025-hit-charts
+     Cited text: "Outside of the Global chart, we got to see just how popular Wasted Love had become across the board when looking at the Spotify charts of individual c..."
+
+📝 TEXT RESPONSE:
+.
+
+8. Switzerland:
+
+
+📝 TEXT RESPONSE:
+In Switzerland, "Espresso Macchiato" by Tommy Cash reached number 2, with multiple Eurovision entries making an impact on the Swiss official singles chart
+
+📚 CITATIONS:
+  1. The songs of Basel 2025 hit the charts across the Globe
+     URL: https://eurovision.tv/story/songs-of-eurovision-2025-hit-charts
+     Cited text: "The music of Basel 2025 continued to play out around the nation, evidenced by the whopping number of 22 Eurovision entries that made an impact on the ..."
+
+📝 TEXT RESPONSE:
+.
+
+9. Sweden:
+
+
+📝 TEXT RESPONSE:
+In Sweden, "Bara Bada Bastu" by KAJ reached number 1
+
+📚 CITATIONS:
+  1. The songs of Basel 2025 hit the charts across the Globe
+     URL: https://eurovision.tv/story/songs-of-eurovision-2025-hit-charts
+     Cited text: "13 songs entered the official singles chart in Sweden, with Iceland's chart welcoming 12, Finland playing host to 11 and Norway seeing the impact of 9..."
+
+📝 TEXT RESPONSE:
+.
+
+10. Iceland:
+
+
+📝 TEXT RESPONSE:
+In Iceland, "VÆB" topped the charts, marking the country's return to the Eurovision Grand Final for the first time since Turin 2022
+
+📚 CITATIONS:
+  1. The songs of Basel 2025 hit the charts across the Globe
+     URL: https://eurovision.tv/story/songs-of-eurovision-2025-hit-charts
+     Cited text: "· Sweden's own Bara Bada Bastu by KAJ was number 1 in all except one of the four countries' charts: Iceland's pride and joy VÆB got the top spot in th..."
+
+📝 TEXT RESPONSE:
+.
+
+Let me search for additional current chart information to verify or update these positions.
+
+🔧 TOOL USED: web_search
+📋 Search Query: "current number 1 song US Billboard Hot 100 June 2025 this week"
+
+🌐 SEARCH RESULTS (10 found):
+  1. Billboard Hot 100™
+     URL: https://www.billboard.com/charts/hot-100/
+     Last updated: January 2, 2013
+
+  2. List of Billboard Hot 100 number ones of 2025 - Wikipedia
+     URL: https://en.wikipedia.org/wiki/List_of_Billboard_Hot_100_number_ones_of_2025
+     Last updated: 1 day ago
+
+  3. Billboard Hot 100: Every No. 1 song of 2025
+     URL: https://www.goldderby.com/feature/billboard-no-1-songs-2025-1206068780/
+     Last updated: 5 days ago
+
+  4. Billboard Hot 100 | Official Charts
+     URL: https://www.officialcharts.com/charts/billboard-hot-100-chart/
+     Last updated: null
+
+  5. Billboard Hot 100 - Wikipedia
+     URL: https://en.wikipedia.org/wiki/Billboard_Hot_100
+     Last updated: 1 week ago
+
+  6. Billboard Top 100 This Week 2025 - Top 100 Billboard Songs 2025 (Best Billboard Music 2025)
+     URL: https://open.spotify.com/playlist/0EN2gQhhn0rCYUR5BY1UJy
+     Last updated: null
+
+  7. Hot 100 Songs
+     URL: https://www.billboard.com/charts/year-end/hot-100-songs/
+     Last updated: August 11, 2023
+
+  8. Billboard Hot 100: Every No. 1 song of 2024
+     URL: https://www.goldderby.com/feature/billboard-number-one-songs-2024-1205662947/
+     Last updated: December 30, 2024
+
+  9. Here’s Every Billboard Hot 100 Year-End No. 1 Song
+     URL: https://www.billboard.com/lists/year-end-hot-100-number-one-songs/
+     Last updated: December 23, 2024
+
+  10. TOP 40 - May 31, 2025 | American Top 40
+     URL: https://www.americantop40.com/charts/top-40-238/latest/
+     Last updated: null
+
+📝 TEXT RESPONSE:
+
+
+Based on the latest search results, I can update some of the information:
+
+United States (Billboard Hot 100):
+
+
+📝 TEXT RESPONSE:
+The current #1 song is "What I Want" by Morgan Wallen featuring Tate McRae
+
+📚 CITATIONS:
+  1. Billboard Hot 100 | Official Charts
+     URL: https://www.officialcharts.com/charts/billboard-hot-100-chart/
+     Cited text: "view as list view as cards · Number 1 · NewWhat I Want Morgan Wallen Featuring Tate McRae · LW: New · Peak: 1, Weeks: 1 · Number 2 · Just In Case Morg..."
+
+  2. Billboard Hot 100 | Official Charts
+     URL: https://www.officialcharts.com/charts/billboard-hot-100-chart/
+     Cited text: "view as list view as cards · Number 1 · NewWhat I Want Morgan Wallen Featuring Tate McRae · LW: New · Peak: 1, Weeks: 1 · Number 2 · Just In Case Morg..."
+
+📝 TEXT RESPONSE:
+
+
+Here's the final compilation of current #1 songs across different countries (as of June 2025):
+
+1. United States: 
+
+📝 TEXT RESPONSE:
+The current #1 song is "What I Want" by Morgan Wallen featuring Tate McRae
+
+📚 CITATIONS:
+  1. Billboard Hot 100 | Official Charts
+     URL: https://www.officialcharts.com/charts/billboard-hot-100-chart/
+     Cited text: "view as list view as cards · Number 1 · NewWhat I Want Morgan Wallen Featuring Tate McRae · LW: New · Peak: 1, Weeks: 1 · Number 2 · Just In Case Morg..."
+
+  2. Billboard Hot 100 | Official Charts
+     URL: https://www.officialcharts.com/charts/billboard-hot-100-chart/
+     Cited text: "view as list view as cards · Number 1 · NewWhat I Want Morgan Wallen Featuring Tate McRae · LW: New · Peak: 1, Weeks: 1 · Number 2 · Just In Case Morg..."
+
+📝 TEXT RESPONSE:
+
+
+2. United Kingdom: 
+
+📝 TEXT RESPONSE:
+Messy by Lola Young is officially the UK's biggest song of 2025 so far, and it hit the Top 10 for the first time on the Official Christmas Chart in December, before quickly rising to Number 1, where it stayed for four consecutive weeks
+
+📚 CITATIONS:
+  1. The Official biggest songs of 2025 so far | Official Charts
+     URL: https://www.officialcharts.com/chart-news/the-official-biggest-songs-of-2025-so-far/
+     Cited text: "Messy by Lola Young is officially the UK’s biggest song of 2025 so far. Racking up 597,000 chart units in the first quarter of 2025 alone (and 775,000..."
+
+📝 TEXT RESPONSE:
+
+
+3. Japan: 
+
+📝 TEXT RESPONSE:
+The current number-one on the Billboard Japan Hot 100 as of May 28, 2025, is "God_i" by Number_i
+
+📚 CITATIONS:
+  1. Billboard Japan Hot 100 - Wikipedia
+     URL: https://en.wikipedia.org/wiki/Billboard_Japan_Hot_100
+     Cited text: "The current number-one on the chart as of the issue dated May 28, 2025, is &quot;God_i&quot; by Number_i. "
+
+  2. Billboard Japan Hot 100 - Wikipedia
+     URL: https://en.wikipedia.org/wiki/Billboard_Japan_Hot_100
+     Cited text: "The current number-one on the chart as of the issue dated May 28, 2025, is "God_i" by Number_i. "
+
+📝 TEXT RESPONSE:
+
+
+4. South Korea: 
+
+📝 TEXT RESPONSE:
+The top song is "THUNDER" by SEVENTEEN
+
+📚 CITATIONS:
+  1. Top Korean Daily Singles Chart
+     URL: https://kma.kkbox.com/charts/daily/song?terr=tw&lang=en&cate=314
+     Cited text: "Check out who&#x27;s hot right now with charts of the most listened to songs on KKBOX: THUNDER - SEVENTEEN (세븐틴), Good Thing - i-dle, HOME SWEET HOME ..."
+
+📝 TEXT RESPONSE:
+
+
+5. Germany: 
+
+📝 TEXT RESPONSE:
+On Germany's official singles chart, "Baller" by Abor & Tynna is at number 3
+
+📚 CITATIONS:
+  1. The songs of Basel 2025 hit the charts across the Globe
+     URL: https://eurovision.tv/story/songs-of-eurovision-2025-hit-charts
+     Cited text: "· At the top end of Germany's official singles chart, Baller is the highest performing Eurovision song right up there at number 3."
+
+📝 TEXT RESPONSE:
+
+
+6. Austria: 
+
+📝 TEXT RESPONSE:
+JJ's "Wasted Love" has reached number 1, along with Luxembourg and Switzerland
+
+📚 CITATIONS:
+  1. The songs of Basel 2025 hit the charts across the Globe
+     URL: https://eurovision.tv/story/songs-of-eurovision-2025-hit-charts
+     Cited text: "JJ's Eurovision winner hit the number 1 spot in three countries (Austria, Luxembourg and Switzerland) and Top 10 in a further 12 nations' daily charts..."
+
+📝 TEXT RESPONSE:
+
+
+7. Switzerland: 
+
+📝 TEXT RESPONSE:
+JJ's "Wasted Love" is number 1
+
+📚 CITATIONS:
+  1. The songs of Basel 2025 hit the charts across the Globe
+     URL: https://eurovision.tv/story/songs-of-eurovision-2025-hit-charts
+     Cited text: "JJ's Eurovision winner hit the number 1 spot in three countries (Austria, Luxembourg and Switzerland) and Top 10 in a further 12 nations' daily charts..."
+
+📝 TEXT RESPONSE:
+
+
+8. Sweden: 
+
+📝 TEXT RESPONSE:
+The song "Bara Bada Bastu" by KAJ was number 1
+
+📚 CITATIONS:
+  1. The songs of Basel 2025 hit the charts across the Globe
+     URL: https://eurovision.tv/story/songs-of-eurovision-2025-hit-charts
+     Cited text: "· Sweden's own Bara Bada Bastu by KAJ was number 1 in all except one of the four countries' charts: Iceland's pride and joy VÆB got the top spot in th..."
+
+📝 TEXT RESPONSE:
+
+
+9. Iceland: 
+
+📝 TEXT RESPONSE:
+Their own "VÆB" got the top spot in their home country
+
+📚 CITATIONS:
+  1. The songs of Basel 2025 hit the charts across the Globe
+     URL: https://eurovision.tv/story/songs-of-eurovision-2025-hit-charts
+     Cited text: "· Sweden's own Bara Bada Bastu by KAJ was number 1 in all except one of the four countries' charts: Iceland's pride and joy VÆB got the top spot in th..."
+
+📝 TEXT RESPONSE:
+
+
+10. Lithuania: 
+
+📝 TEXT RESPONSE:
+Lithuania has shown massive support for Eurovision songs, with 29 of the 37 songs placed on their official singles chart. The highest of the pack at number 1 is "Baller" by Abor & Tynna
+
+📚 CITATIONS:
+  1. The songs of Basel 2025 hit the charts across the Globe
+     URL: https://eurovision.tv/story/songs-of-eurovision-2025-hit-charts
+     Cited text: "· But to date, there is no country's music-listening audience that has taken to the songs of the 69th Eurovision Song Contest quite like one... Lithua..."
+
+📝 TEXT RESPONSE:
+
+
+Some of these chart positions may have changed very recently, as chart data is constantly updating and some of the information is from recent but not necessarily current chart weeks.
+
+💰 Web Search Usage: 3 searches
+🪙 Tokens: 62877 input, 1502 output
+
+Message ID: msg_01WqgwgpeHz6tJ6NQg3E8y3F
+Model: claude-3-5-sonnet-20241022
+Stop Reason: end_turn
