@@ -1,5 +1,5 @@
 // =================================================================
-// DEV NOTES for api/process-queue.js (Updated 2025-06-03)
+// DEV NOTES for api/process-queue.js (Updated 2025-06-04)
 // =================================================================
 /*
 ARCHITECTURE UPDATE - PACK-ONLY REQUEST BUILDING:
@@ -195,46 +195,42 @@ function processClaudeResponseWithSizeControl(claudeResponse, requestPayload) {
   const originalSize = JSON.stringify(claudeResponse).length;
   processingLog.push(`Original response size: ${originalSize} characters`);
 
-  // Only apply cleaning if web search was enabled
+  // Always apply standard cleaning if web search was enabled
   if (responseOptions?.webSearch) {
-    processingLog.push('Web search detected, applying response cleaning, citation rebuilding, and content consolidation...');
-    console.log('Web search detected, applying response cleaning, citation rebuilding, and content consolidation...');
+    processingLog.push('Web search detected, applying standard cleaning (removing encrypted keys, rebuilding citations)...');
+    console.log('Web search detected, applying standard cleaning...');
 
     let cleanedResponse;
-
-    // Try normal cleaning first
     try {
       cleanedResponse = deepCleanResponseWithCitations(claudeResponse);
-    } catch (cleaningError) {
-      console.error('Cleaning failed, using original response:', cleaningError);
-      processingLog.push(`Cleaning failed: ${cleaningError.message}, using original response`);
-    }
-    
-    if (cleanedResponse) {
-      // Check size - if still too large, use aggressive cleaning
-      const responseSize = JSON.stringify(cleanedResponse).length;
-      processingLog.push(`Response size after cleaning: ${responseSize} characters (${Math.round((originalSize - responseSize) / originalSize * 100)}% reduction)`);
-      console.log(`Response size after cleaning: ${responseSize} characters`);
-
-      if (responseSize > 45000) { // Leave some buffer under 50k limit
-        processingLog.push('Response still too large, applying aggressive cleaning...');
+      const standardCleanedSize = JSON.stringify(cleanedResponse).length;
+      processingLog.push(`Response size after standard cleaning: ${standardCleanedSize} characters (${Math.round((originalSize - standardCleanedSize) / originalSize * 100)}% reduction)`);
+      
+      // Only apply aggressive cleaning if we're still approaching the 50KB limit
+      if (standardCleanedSize > 45000) { // Leave buffer under 50KB limit
+        processingLog.push('Response still too large after standard cleaning, applying aggressive cleaning...');
         console.log('Response still too large, applying aggressive cleaning...');
         try {
           cleanedResponse = aggressiveCleanResponseWithCitations(claudeResponse);
-          const newSize = JSON.stringify(cleanedResponse).length;
-          processingLog.push(`Response size after aggressive cleaning: ${newSize} characters (${Math.round((originalSize - newSize) / originalSize * 100)}% total reduction)`);
-          console.log(`Response size after aggressive cleaning: ${newSize} characters`);
+          const aggressiveCleanedSize = JSON.stringify(cleanedResponse).length;
+          processingLog.push(`Response size after aggressive cleaning: ${aggressiveCleanedSize} characters (${Math.round((originalSize - aggressiveCleanedSize) / originalSize * 100)}% total reduction)`);
         } catch (aggressiveError) {
           console.error('Aggressive cleaning failed:', aggressiveError);
           processingLog.push(`Aggressive cleaning failed: ${aggressiveError.message}, using standard cleaned response`);
         }
+      } else {
+        processingLog.push('Standard cleaning sufficient - response size acceptable');
       }
-
+      
       finalResponse = cleanedResponse;
+      
+    } catch (cleaningError) {
+      console.error('Standard cleaning failed, using original response:', cleaningError);
+      processingLog.push(`Standard cleaning failed: ${cleaningError.message}, using original response`);
     }
   } else {
-    processingLog.push('No web search used, skipping response cleaning');
-    console.log('No web search used, skipping response cleaning');
+    processingLog.push('No web search used, skipping cleaning');
+    console.log('No web search used, skipping cleaning');
   }
 
   // Calculate final size and check if we're under the limit
