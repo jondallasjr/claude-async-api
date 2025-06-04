@@ -356,17 +356,39 @@ function rebuildContentWithCitations(contentArray) {
     
     // Handle embedded cite tags in text
     if (item.type === 'text' && item.text) {
-      const citeTagRegex = /<cite index="([^"]+)">([^<]+)<\/cite>/g;
+      // Handle escaped cite tags: <cite index=\"...\">content</cite>
+      const escapedCiteRegex = /<cite index=\\"([^\\]+)\\">([^<]+)<\/cite>/g;
+      // Handle normal cite tags: <cite index="...">content</cite>  
+      const normalCiteRegex = /<cite index="([^"]+)">([^<]+)<\/cite>/g;
+      
       let match;
-      while ((match = citeTagRegex.exec(item.text)) !== null) {
+      // Check for escaped citations first
+      while ((match = escapedCiteRegex.exec(item.text)) !== null) {
         const [fullMatch, indexInfo, citedText] = match;
-        const citationKey = `doc_${indexInfo}`; // Use index as unique key for document citations
+        const citationKey = `doc_${indexInfo}`;
         
         if (!citationRegistry.has(citationKey)) {
           citationRegistry.set(citationKey, {
             number: citationCounter++,
             title: `Source ${indexInfo}`,
-            url: null, // Document citations don't have URLs
+            url: null,
+            cited_text: citedText,
+            index: indexInfo,
+            type: 'document'
+          });
+        }
+      }
+      
+      // Then check for normal citations
+      while ((match = normalCiteRegex.exec(item.text)) !== null) {
+        const [fullMatch, indexInfo, citedText] = match;
+        const citationKey = `doc_${indexInfo}`;
+        
+        if (!citationRegistry.has(citationKey)) {
+          citationRegistry.set(citationKey, {
+            number: citationCounter++,
+            title: `Source ${indexInfo}`,
+            url: null,
             cited_text: citedText,
             index: indexInfo,
             type: 'document'
@@ -383,8 +405,17 @@ function rebuildContentWithCitations(contentArray) {
       
       // Handle embedded cite tags - replace with footnote markers
       if (processedText.includes('<cite')) {
-        const citeTagRegex = /<cite index="([^"]+)">([^<]+)<\/cite>/g;
-        processedText = processedText.replace(citeTagRegex, (match, indexInfo, citedText) => {
+        // Handle escaped cite tags first: <cite index=\"...\">
+        const escapedCiteRegex = /<cite index=\\"([^\\]+)\\">([^<]+)<\/cite>/g;
+        processedText = processedText.replace(escapedCiteRegex, (match, indexInfo, citedText) => {
+          const citationKey = `doc_${indexInfo}`;
+          const citation = citationRegistry.get(citationKey);
+          return citation ? `${citedText}[^${citation.number}]` : citedText;
+        });
+        
+        // Then handle normal cite tags: <cite index="...">
+        const normalCiteRegex = /<cite index="([^"]+)">([^<]+)<\/cite>/g;
+        processedText = processedText.replace(normalCiteRegex, (match, indexInfo, citedText) => {
           const citationKey = `doc_${indexInfo}`;
           const citation = citationRegistry.get(citationKey);
           return citation ? `${citedText}[^${citation.number}]` : citedText;
@@ -533,9 +564,30 @@ function rebuildContentWithCitationsAggressive(contentArray) {
     
     // Handle embedded cite tags
     if (item.type === 'text' && item.text && citationRegistry.size < 20) {
-      const citeTagRegex = /<cite index="([^"]+)">([^<]+)<\/cite>/g;
+      // Handle both escaped and unescaped cite tags
+      const escapedCiteRegex = /<cite index=\\"([^\\]+)\\">([^<]+)<\/cite>/g;
+      const normalCiteRegex = /<cite index="([^"]+)">([^<]+)<\/cite>/g;
+      
       let match;
-      while ((match = citeTagRegex.exec(item.text)) !== null && citationRegistry.size < 20) {
+      // Check escaped citations first
+      while ((match = escapedCiteRegex.exec(item.text)) !== null && citationRegistry.size < 20) {
+        const [fullMatch, indexInfo, citedText] = match;
+        const citationKey = `doc_${indexInfo}`;
+        
+        if (!citationRegistry.has(citationKey)) {
+          citationRegistry.set(citationKey, {
+            number: citationCounter++,
+            title: `Source ${indexInfo}`,
+            url: null,
+            cited_text: citedText.substring(0, 200), // Truncate cited text
+            index: indexInfo,
+            type: 'document'
+          });
+        }
+      }
+      
+      // Then check normal citations
+      while ((match = normalCiteRegex.exec(item.text)) !== null && citationRegistry.size < 20) {
         const [fullMatch, indexInfo, citedText] = match;
         const citationKey = `doc_${indexInfo}`;
         
@@ -560,8 +612,17 @@ function rebuildContentWithCitationsAggressive(contentArray) {
       
       // Handle embedded cite tags
       if (processedText.includes('<cite')) {
-        const citeTagRegex = /<cite index="([^"]+)">([^<]+)<\/cite>/g;
-        processedText = processedText.replace(citeTagRegex, (match, indexInfo, citedText) => {
+        // Handle escaped cite tags first
+        const escapedCiteRegex = /<cite index=\\"([^\\]+)\\">([^<]+)<\/cite>/g;
+        processedText = processedText.replace(escapedCiteRegex, (match, indexInfo, citedText) => {
+          const citationKey = `doc_${indexInfo}`;
+          const citation = citationRegistry.get(citationKey);
+          return citation ? `${citedText}[^${citation.number}]` : citedText;
+        });
+        
+        // Then handle normal cite tags
+        const normalCiteRegex = /<cite index="([^"]+)">([^<]+)<\/cite>/g;
+        processedText = processedText.replace(normalCiteRegex, (match, indexInfo, citedText) => {
           const citationKey = `doc_${indexInfo}`;
           const citation = citationRegistry.get(citationKey);
           return citation ? `${citedText}[^${citation.number}]` : citedText;
