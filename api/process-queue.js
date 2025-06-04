@@ -197,8 +197,8 @@ function processClaudeResponseWithSizeControl(claudeResponse, requestPayload) {
 
   // Only apply cleaning if web search was enabled
   if (responseOptions?.webSearch) {
-    processingLog.push('Web search detected, applying response cleaning and citation rebuilding...');
-    console.log('Web search detected, applying response cleaning and citation rebuilding...');
+    processingLog.push('Web search detected, applying response cleaning, citation rebuilding, and content consolidation...');
+    console.log('Web search detected, applying response cleaning, citation rebuilding, and content consolidation...');
 
     let cleanedResponse;
 
@@ -436,22 +436,8 @@ function rebuildContentWithCitations(contentArray) {
         type: 'text',
         text: processedText
       });
-    } else if (item.type === 'web_search_tool_result') {
-      // Clean web search results but keep essential structure
-      processedContent.push({
-        type: 'web_search_tool_result',
-        tool_use_id: item.tool_use_id,
-        content: item.content ? item.content.slice(0, 10).map(result => ({
-          type: result.type,
-          title: result.title,
-          url: result.url,
-          page_age: result.page_age
-        })) : []
-      });
-    } else {
-      // Keep other content types as-is (but clean them)
-      processedContent.push(deepCleanResponseWithCitations(item));
     }
+    // Skip all other content types - we only need the final consolidated text
   }
   
   // Add footnotes section if we have citations
@@ -481,7 +467,23 @@ function rebuildContentWithCitations(contentArray) {
     });
   }
   
-  return processedContent;
+  // CONSOLIDATE ALL TEXT OBJECTS INTO ONE MARKDOWN DOCUMENT
+  const allTextContent = processedContent
+    .filter(item => item.type === 'text')
+    .map(item => item.text)
+    .join('');
+  
+  // Keep non-text content (like web search results) but simplified
+  const nonTextContent = processedContent.filter(item => item.type !== 'text');
+  
+  // Return consolidated structure
+  return [
+    {
+      type: 'text',
+      text: allTextContent
+    },
+    ...nonTextContent
+  ];
 }
 
 function aggressiveCleanResponseWithCitations(obj) {
@@ -643,12 +645,8 @@ function rebuildContentWithCitationsAggressive(contentArray) {
         type: 'text',
         text: processedText
       });
-    } else if (item.type === 'web_search_tool_result') {
-      // Skip web search results in aggressive mode to save space
-      continue;
-    } else {
-      processedContent.push(aggressiveCleanResponseWithCitations(item));
     }
+    // Skip all other content types - we only need the final consolidated text
   }
   
   // Add compact footnotes section
@@ -675,5 +673,18 @@ function rebuildContentWithCitationsAggressive(contentArray) {
     });
   }
   
-  return processedContent;
+  // CONSOLIDATE ALL TEXT OBJECTS INTO ONE MARKDOWN DOCUMENT
+  const allTextContent = processedContent
+    .filter(item => item.type === 'text')
+    .map(item => item.text)
+    .join('');
+  
+  // Return just the consolidated markdown text for Coda
+  // All citation information is now embedded in the text
+  return [
+    {
+      type: 'text',
+      text: allTextContent
+    }
+  ];
 }
