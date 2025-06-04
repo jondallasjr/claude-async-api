@@ -185,100 +185,6 @@ async function callClaudeAPI(payload) {
   return await response.json();
 }
 
-function deepCleanResponse(obj) {
-  if (obj === null || typeof obj !== 'object') {
-    return obj;
-  }
-
-  if (Array.isArray(obj)) {
-    return obj.map(item => deepCleanResponse(item));
-  }
-
-  const cleaned = {};
-
-  for (const [key, value] of Object.entries(obj)) {
-    // Remove encrypted fields that consume massive space
-    if (key === 'encrypted_content' || key === 'encrypted_index') {
-      continue;
-    }
-
-    // For web_search_result objects, keep only essential metadata
-    if (obj.type === 'web_search_result') {
-      // Keep only: type, title, url, page_age (remove encrypted_content)
-      if (['type', 'title', 'url', 'page_age'].includes(key)) {
-        cleaned[key] = value;
-      }
-      continue;
-    }
-
-    // For citation objects, preserve all fields except encrypted_index
-    if (obj.type === 'web_search_result_location') {
-      // Keep: type, cited_text, url, title (remove encrypted_index)
-      if (['type', 'cited_text', 'url', 'title'].includes(key)) {
-        cleaned[key] = value;
-      }
-      continue;
-    }
-
-    // For all other objects, recursively clean and preserve structure
-    cleaned[key] = deepCleanResponse(value);
-  }
-
-  return cleaned;
-}
-
-// Alternative more aggressive cleaning function if 50k limit is still exceeded
-function aggressiveCleanResponse(obj) {
-  if (obj === null || typeof obj !== 'object') {
-    return obj;
-  }
-
-  if (Array.isArray(obj)) {
-    return obj.map(item => aggressiveCleanResponse(item));
-  }
-
-  const cleaned = {};
-
-  for (const [key, value] of Object.entries(obj)) {
-    // Remove all encrypted fields
-    if (key === 'encrypted_content' || key === 'encrypted_index') {
-      continue;
-    }
-
-    // For web_search_tool_result content, keep only essential results
-    if (key === 'content' && obj.type === 'web_search_tool_result') {
-      // Limit to first 10 search results to control size
-      if (Array.isArray(value)) {
-        cleaned[key] = value.slice(0, 10).map(item => aggressiveCleanResponse(item));
-      } else {
-        cleaned[key] = aggressiveCleanResponse(value);
-      }
-      continue;
-    }
-
-    // For web_search_result, keep minimal data
-    if (obj.type === 'web_search_result') {
-      if (['type', 'title', 'url'].includes(key)) {
-        cleaned[key] = value;
-      }
-      continue;
-    }
-
-    // For citations, keep essential data only
-    if (obj.type === 'web_search_result_location') {
-      if (['type', 'cited_text', 'url', 'title'].includes(key)) {
-        cleaned[key] = value;
-      }
-      continue;
-    }
-
-    // Recursively clean other objects
-    cleaned[key] = aggressiveCleanResponse(value);
-  }
-
-  return cleaned;
-}
-
 function processClaudeResponseWithSizeControl(claudeResponse, requestPayload) {
   const { modelPricing, responseOptions } = requestPayload;
 
@@ -291,31 +197,30 @@ function processClaudeResponseWithSizeControl(claudeResponse, requestPayload) {
 
   // Only apply cleaning if web search was enabled
   if (responseOptions?.webSearch) {
-    processingLog.push('Web search detected, applying response cleaning...');
-    console.log('Web search detected, applying response cleaning...');
+    processingLog.push('Web search detected, applying response cleaning and citation rebuilding...');
+    console.log('Web search detected, applying response cleaning and citation rebuilding...');
 
     let cleanedResponse;
 
     // Try normal cleaning first
     try {
-      cleanedResponse = deepCleanResponse(claudeResponse);
+      cleanedResponse = deepCleanResponseWithCitations(claudeResponse);
     } catch (cleaningError) {
       console.error('Cleaning failed, using original response:', cleaningError);
       processingLog.push(`Cleaning failed: ${cleaningError.message}, using original response`);
-      // Don't return early, just continue with finalResponse = claudeResponse
     }
     
     if (cleanedResponse) {
       // Check size - if still too large, use aggressive cleaning
       const responseSize = JSON.stringify(cleanedResponse).length;
-      processingLog.push(`Response size after standard cleaning: ${responseSize} characters (${Math.round((originalSize - responseSize) / originalSize * 100)}% reduction)`);
+      processingLog.push(`Response size after cleaning: ${responseSize} characters (${Math.round((originalSize - responseSize) / originalSize * 100)}% reduction)`);
       console.log(`Response size after cleaning: ${responseSize} characters`);
 
       if (responseSize > 45000) { // Leave some buffer under 50k limit
         processingLog.push('Response still too large, applying aggressive cleaning...');
         console.log('Response still too large, applying aggressive cleaning...');
         try {
-          cleanedResponse = aggressiveCleanResponse(claudeResponse);
+          cleanedResponse = aggressiveCleanResponseWithCitations(claudeResponse);
           const newSize = JSON.stringify(cleanedResponse).length;
           processingLog.push(`Response size after aggressive cleaning: ${newSize} characters (${Math.round((originalSize - newSize) / originalSize * 100)}% total reduction)`);
           console.log(`Response size after aggressive cleaning: ${newSize} characters`);
@@ -332,9 +237,15 @@ function processClaudeResponseWithSizeControl(claudeResponse, requestPayload) {
     console.log('No web search used, skipping response cleaning');
   }
 
-  // Calculate final size
+  // Calculate final size and check if we're under the limit
   const finalSize = JSON.stringify(finalResponse).length;
   processingLog.push(`Final response size: ${finalSize} characters`);
+  
+  // Warn if still approaching limit
+  if (finalSize > 45000) {
+    processingLog.push(`⚠️  WARNING: Response size ${finalSize} approaching 50k limit`);
+    console.warn(`Response size ${finalSize} approaching 50k limit for request ${requestPayload.requestId}`);
+  }
 
   // Build final response
   const response = {
@@ -348,7 +259,8 @@ function processClaudeResponseWithSizeControl(claudeResponse, requestPayload) {
       finalSizeChars: finalSize,
       sizeReductionPercent: responseOptions?.webSearch ? Math.round((originalSize - finalSize) / originalSize * 100) : 0,
       processingLog: processingLog,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      underSizeLimit: finalSize < 50000
     }
   };
 
@@ -370,4 +282,337 @@ function processClaudeResponseWithSizeControl(claudeResponse, requestPayload) {
   }
 
   return response;
+}
+
+function deepCleanResponseWithCitations(obj) {
+  if (obj === null || typeof obj !== 'object') {
+    return obj;
+  }
+
+  if (Array.isArray(obj)) {
+    return obj.map(item => deepCleanResponseWithCitations(item));
+  }
+
+  const cleaned = {};
+  
+  for (const [key, value] of Object.entries(obj)) {
+    // Remove encrypted fields that consume massive space
+    if (key === 'encrypted_content' || key === 'encrypted_index') {
+      continue;
+    }
+    
+    // Special handling for content arrays (rebuild citations)
+    if (key === 'content' && Array.isArray(value)) {
+      cleaned[key] = rebuildContentWithCitations(value);
+      continue;
+    }
+    
+    // For web_search_result objects, keep only essential metadata
+    if (obj.type === 'web_search_result') {
+      // Keep only: type, title, url, page_age (remove encrypted_content)
+      if (['type', 'title', 'url', 'page_age'].includes(key)) {
+        cleaned[key] = value;
+      }
+      continue;
+    }
+    
+    // For citation objects, preserve all fields except encrypted_index
+    if (obj.type === 'web_search_result_location') {
+      // Keep: type, cited_text, url, title (remove encrypted_index)
+      if (['type', 'cited_text', 'url', 'title'].includes(key)) {
+        cleaned[key] = value;
+      }
+      continue;
+    }
+    
+    // For all other objects, recursively clean and preserve structure
+    cleaned[key] = deepCleanResponseWithCitations(value);
+  }
+  
+  return cleaned;
+}
+
+function rebuildContentWithCitations(contentArray) {
+  const citationRegistry = new Map();
+  let citationCounter = 1;
+  const processedContent = [];
+  
+  // First pass: collect all citations and assign numbers
+  for (const item of contentArray) {
+    // Handle web search citations (separate citation objects)
+    if (item.type === 'text' && item.citations && Array.isArray(item.citations)) {
+      for (const citation of item.citations) {
+        if (citation.url && !citationRegistry.has(citation.url)) {
+          citationRegistry.set(citation.url, {
+            number: citationCounter++,
+            title: citation.title || 'Unknown Source',
+            url: citation.url,
+            cited_text: citation.cited_text || '',
+            type: 'web_search'
+          });
+        }
+      }
+    }
+    
+    // Handle embedded cite tags in text
+    if (item.type === 'text' && item.text) {
+      const citeTagRegex = /<cite index="([^"]+)">([^<]+)<\/cite>/g;
+      let match;
+      while ((match = citeTagRegex.exec(item.text)) !== null) {
+        const [fullMatch, indexInfo, citedText] = match;
+        const citationKey = `doc_${indexInfo}`; // Use index as unique key for document citations
+        
+        if (!citationRegistry.has(citationKey)) {
+          citationRegistry.set(citationKey, {
+            number: citationCounter++,
+            title: `Source ${indexInfo}`,
+            url: null, // Document citations don't have URLs
+            cited_text: citedText,
+            index: indexInfo,
+            type: 'document'
+          });
+        }
+      }
+    }
+  }
+  
+  // Second pass: rebuild content with citation markers
+  for (const item of contentArray) {
+    if (item.type === 'text') {
+      let processedText = item.text || '';
+      
+      // Handle embedded cite tags - replace with footnote markers
+      if (processedText.includes('<cite')) {
+        const citeTagRegex = /<cite index="([^"]+)">([^<]+)<\/cite>/g;
+        processedText = processedText.replace(citeTagRegex, (match, indexInfo, citedText) => {
+          const citationKey = `doc_${indexInfo}`;
+          const citation = citationRegistry.get(citationKey);
+          return citation ? `${citedText}[^${citation.number}]` : citedText;
+        });
+      }
+      
+      // Handle web search citations (separate citation objects)
+      if (item.citations && Array.isArray(item.citations) && item.citations.length > 0) {
+        const citationMarkers = item.citations
+          .filter(c => c.url && citationRegistry.has(c.url))
+          .map(c => `[^${citationRegistry.get(c.url).number}]`)
+          .join('');
+        
+        processedText += citationMarkers;
+      }
+      
+      processedContent.push({
+        type: 'text',
+        text: processedText
+      });
+    } else if (item.type === 'web_search_tool_result') {
+      // Clean web search results but keep essential structure
+      processedContent.push({
+        type: 'web_search_tool_result',
+        tool_use_id: item.tool_use_id,
+        content: item.content ? item.content.slice(0, 10).map(result => ({
+          type: result.type,
+          title: result.title,
+          url: result.url,
+          page_age: result.page_age
+        })) : []
+      });
+    } else {
+      // Keep other content types as-is (but clean them)
+      processedContent.push(deepCleanResponseWithCitations(item));
+    }
+  }
+  
+  // Add footnotes section if we have citations
+  if (citationRegistry.size > 0) {
+    const webSearchCitations = Array.from(citationRegistry.values()).filter(c => c.type === 'web_search');
+    const documentCitations = Array.from(citationRegistry.values()).filter(c => c.type === 'document');
+    
+    let footnotesText = '\n\n---\n\n**Sources:**\n\n';
+    
+    // Add web search citations with URLs
+    webSearchCitations
+      .sort((a, b) => a.number - b.number)
+      .forEach(citation => {
+        footnotesText += `[^${citation.number}]: [${citation.title}](${citation.url})\n`;
+      });
+    
+    // Add document citations without URLs
+    documentCitations
+      .sort((a, b) => a.number - b.number)
+      .forEach(citation => {
+        footnotesText += `[^${citation.number}]: ${citation.cited_text} (Index: ${citation.index})\n`;
+      });
+    
+    processedContent.push({
+      type: 'text',
+      text: footnotesText
+    });
+  }
+  
+  return processedContent;
+}
+
+function aggressiveCleanResponseWithCitations(obj) {
+  if (obj === null || typeof obj !== 'object') {
+    return obj;
+  }
+
+  if (Array.isArray(obj)) {
+    return obj.map(item => aggressiveCleanResponseWithCitations(item));
+  }
+
+  const cleaned = {};
+  
+  for (const [key, value] of Object.entries(obj)) {
+    // Remove all encrypted fields
+    if (key === 'encrypted_content' || key === 'encrypted_index') {
+      continue;
+    }
+    
+    // Special handling for content arrays (rebuild citations with limits)
+    if (key === 'content' && Array.isArray(value)) {
+      cleaned[key] = rebuildContentWithCitationsAggressive(value);
+      continue;
+    }
+    
+    // For web_search_tool_result content, keep only essential results
+    if (key === 'content' && obj.type === 'web_search_tool_result') {
+      // Limit to first 5 search results to control size
+      if (Array.isArray(value)) {
+        cleaned[key] = value.slice(0, 5).map(item => aggressiveCleanResponseWithCitations(item));
+      } else {
+        cleaned[key] = aggressiveCleanResponseWithCitations(value);
+      }
+      continue;
+    }
+    
+    // For web_search_result, keep minimal data
+    if (obj.type === 'web_search_result') {
+      if (['type', 'title', 'url'].includes(key)) {
+        cleaned[key] = value;
+      }
+      continue;
+    }
+    
+    // For citations, keep essential data only
+    if (obj.type === 'web_search_result_location') {
+      if (['type', 'url', 'title'].includes(key)) {  // Remove cited_text to save space
+        cleaned[key] = value;
+      }
+      continue;
+    }
+    
+    // Recursively clean other objects
+    cleaned[key] = aggressiveCleanResponseWithCitations(value);
+  }
+  
+  return cleaned;
+}
+
+function rebuildContentWithCitationsAggressive(contentArray) {
+  const citationRegistry = new Map();
+  let citationCounter = 1;
+  const processedContent = [];
+  
+  // First pass: collect citations (limit to 20 unique sources)
+  for (const item of contentArray) {
+    // Handle web search citations
+    if (item.type === 'text' && item.citations && Array.isArray(item.citations)) {
+      for (const citation of item.citations) {
+        if (citation.url && !citationRegistry.has(citation.url) && citationRegistry.size < 20) {
+          citationRegistry.set(citation.url, {
+            number: citationCounter++,
+            title: (citation.title || 'Source').substring(0, 100), // Truncate titles
+            url: citation.url,
+            type: 'web_search'
+          });
+        }
+      }
+    }
+    
+    // Handle embedded cite tags
+    if (item.type === 'text' && item.text && citationRegistry.size < 20) {
+      const citeTagRegex = /<cite index="([^"]+)">([^<]+)<\/cite>/g;
+      let match;
+      while ((match = citeTagRegex.exec(item.text)) !== null && citationRegistry.size < 20) {
+        const [fullMatch, indexInfo, citedText] = match;
+        const citationKey = `doc_${indexInfo}`;
+        
+        if (!citationRegistry.has(citationKey)) {
+          citationRegistry.set(citationKey, {
+            number: citationCounter++,
+            title: `Source ${indexInfo}`,
+            url: null,
+            cited_text: citedText.substring(0, 200), // Truncate cited text
+            index: indexInfo,
+            type: 'document'
+          });
+        }
+      }
+    }
+  }
+  
+  // Second pass: rebuild content with citation markers
+  for (const item of contentArray) {
+    if (item.type === 'text') {
+      let processedText = item.text || '';
+      
+      // Handle embedded cite tags
+      if (processedText.includes('<cite')) {
+        const citeTagRegex = /<cite index="([^"]+)">([^<]+)<\/cite>/g;
+        processedText = processedText.replace(citeTagRegex, (match, indexInfo, citedText) => {
+          const citationKey = `doc_${indexInfo}`;
+          const citation = citationRegistry.get(citationKey);
+          return citation ? `${citedText}[^${citation.number}]` : citedText;
+        });
+      }
+      
+      // Handle web search citations
+      if (item.citations && Array.isArray(item.citations) && item.citations.length > 0) {
+        const citationMarkers = item.citations
+          .filter(c => c.url && citationRegistry.has(c.url))
+          .map(c => `[^${citationRegistry.get(c.url).number}]`)
+          .join('');
+        
+        processedText += citationMarkers;
+      }
+      
+      processedContent.push({
+        type: 'text',
+        text: processedText
+      });
+    } else if (item.type === 'web_search_tool_result') {
+      // Skip web search results in aggressive mode to save space
+      continue;
+    } else {
+      processedContent.push(aggressiveCleanResponseWithCitations(item));
+    }
+  }
+  
+  // Add compact footnotes section
+  if (citationRegistry.size > 0) {
+    const webSearchCitations = Array.from(citationRegistry.values()).filter(c => c.type === 'web_search');
+    const documentCitations = Array.from(citationRegistry.values()).filter(c => c.type === 'document');
+    
+    let footnotesText = '\n\n**Sources:** ';
+    
+    const allCitations = [...webSearchCitations, ...documentCitations]
+      .sort((a, b) => a.number - b.number);
+    
+    footnotesText += allCitations.map(citation => {
+      if (citation.type === 'web_search') {
+        return `[^${citation.number}]: [${citation.title}](${citation.url})`;
+      } else {
+        return `[^${citation.number}]: ${citation.cited_text}`;
+      }
+    }).join(' • ');
+    
+    processedContent.push({
+      type: 'text',
+      text: footnotesText
+    });
+  }
+  
+  return processedContent;
 }
