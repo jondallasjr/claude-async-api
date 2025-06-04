@@ -188,9 +188,12 @@ async function callClaudeAPI(payload) {
 function processClaudeResponse(claudeResponse, requestPayload) {
   const { modelPricing } = requestPayload;
 
-  // Start with Claude's raw response
+  // Deep clean the response to remove encrypted content while preserving citations
+  const cleanedResponse = deepCleanResponse(claudeResponse);
+
+  // Start with cleaned Claude response
   const response = {
-    ...claudeResponse,  // Everything from Claude as-is
+    ...cleanedResponse,
     requestId: requestPayload.requestId,
     completedAt: new Date().toISOString()
   };
@@ -213,4 +216,46 @@ function processClaudeResponse(claudeResponse, requestPayload) {
   }
 
   return response;
+}
+
+function deepCleanResponse(obj) {
+  if (obj === null || typeof obj !== 'object') {
+    return obj;
+  }
+
+  if (Array.isArray(obj)) {
+    return obj.map(item => deepCleanResponse(item));
+  }
+
+  const cleaned = {};
+  
+  for (const [key, value] of Object.entries(obj)) {
+    // Remove encrypted fields that consume massive space
+    if (key === 'encrypted_content' || key === 'encrypted_index') {
+      continue;
+    }
+    
+    // For web_search_result objects, keep only essential metadata
+    if (obj.type === 'web_search_result') {
+      // Keep only: type, title, url, page_age (remove encrypted_content)
+      if (['type', 'title', 'url', 'page_age'].includes(key)) {
+        cleaned[key] = value;
+      }
+      continue;
+    }
+    
+    // For citation objects, preserve all fields except encrypted_index
+    if (obj.type === 'web_search_result_location') {
+      // Keep: type, cited_text, url, title (remove encrypted_index)
+      if (['type', 'cited_text', 'url', 'title'].includes(key)) {
+        cleaned[key] = value;
+      }
+      continue;
+    }
+    
+    // For all other objects, recursively clean and preserve structure
+    cleaned[key] = deepCleanResponse(value);
+  }
+  
+  return cleaned;
 }
