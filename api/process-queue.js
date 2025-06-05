@@ -174,7 +174,8 @@ async function callClaudeAPI(payload) {
       'x-api-key': apiKey,
       'anthropic-version': '2023-06-01'
     },
-    body: JSON.stringify(claudeRequest)  // Send as-is from Pack!
+    body: JSON.stringify(claudeRequest),  // Send as-is from Pack!
+    signal: AbortSignal.timeout(600000) // 10 minutes instead of default ~60-90s
   });
 
   if (!response.ok) {
@@ -291,7 +292,7 @@ function processClaudeResponseWithSizeControl(claudeResponse, requestPayload) {
   return response;
 }
 
-// NEW FUNCTION: Consolidate content array into object by type
+// Consolidate content array into object by type
 function consolidateContentByType(contentArray) {
   const consolidated = {};
   
