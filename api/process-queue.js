@@ -195,42 +195,52 @@ function processClaudeResponseWithSizeControl(claudeResponse, requestPayload) {
   const originalSize = JSON.stringify(claudeResponse).length;
   processingLog.push(`Original response size: ${originalSize} characters`);
 
-  // Always apply standard cleaning if web search was enabled
+  // Only apply cleaning if web search was enabled
   if (responseOptions?.webSearch) {
-    processingLog.push('Web search detected, applying standard cleaning (removing encrypted keys, rebuilding citations)...');
-    console.log('Web search detected, applying standard cleaning...');
+    processingLog.push('Web search detected, applying response cleaning, citation rebuilding, and content consolidation...');
+    console.log('Web search detected, applying response cleaning, citation rebuilding, and content consolidation...');
 
     let cleanedResponse;
+
+    // Try normal cleaning first
     try {
       cleanedResponse = deepCleanResponseWithCitations(claudeResponse);
-      const standardCleanedSize = JSON.stringify(cleanedResponse).length;
-      processingLog.push(`Response size after standard cleaning: ${standardCleanedSize} characters (${Math.round((originalSize - standardCleanedSize) / originalSize * 100)}% reduction)`);
-      
-      // Only apply aggressive cleaning if we're still approaching the 50KB limit
-      if (standardCleanedSize > 45000) { // Leave buffer under 50KB limit
-        processingLog.push('Response still too large after standard cleaning, applying aggressive cleaning...');
+    } catch (cleaningError) {
+      console.error('Cleaning failed, using original response:', cleaningError);
+      processingLog.push(`Cleaning failed: ${cleaningError.message}, using original response`);
+    }
+    
+    if (cleanedResponse) {
+      // Check size - if still too large, use aggressive cleaning
+      const responseSize = JSON.stringify(cleanedResponse).length;
+      processingLog.push(`Response size after cleaning: ${responseSize} characters (${Math.round((originalSize - responseSize) / originalSize * 100)}% reduction)`);
+      console.log(`Response size after cleaning: ${responseSize} characters`);
+
+      if (responseSize > 45000) { // Leave some buffer under 50k limit
+        processingLog.push('Response still too large, applying aggressive cleaning...');
         console.log('Response still too large, applying aggressive cleaning...');
         try {
           cleanedResponse = aggressiveCleanResponseWithCitations(claudeResponse);
-          const aggressiveCleanedSize = JSON.stringify(cleanedResponse).length;
-          processingLog.push(`Response size after aggressive cleaning: ${aggressiveCleanedSize} characters (${Math.round((originalSize - aggressiveCleanedSize) / originalSize * 100)}% total reduction)`);
+          const newSize = JSON.stringify(cleanedResponse).length;
+          processingLog.push(`Response size after aggressive cleaning: ${newSize} characters (${Math.round((originalSize - newSize) / originalSize * 100)}% total reduction)`);
+          console.log(`Response size after aggressive cleaning: ${newSize} characters`);
         } catch (aggressiveError) {
           console.error('Aggressive cleaning failed:', aggressiveError);
           processingLog.push(`Aggressive cleaning failed: ${aggressiveError.message}, using standard cleaned response`);
         }
-      } else {
-        processingLog.push('Standard cleaning sufficient - response size acceptable');
       }
-      
+
       finalResponse = cleanedResponse;
-      
-    } catch (cleaningError) {
-      console.error('Standard cleaning failed, using original response:', cleaningError);
-      processingLog.push(`Standard cleaning failed: ${cleaningError.message}, using original response`);
     }
   } else {
-    processingLog.push('No web search used, skipping cleaning');
-    console.log('No web search used, skipping cleaning');
+    processingLog.push('No web search used, skipping response cleaning');
+    console.log('No web search used, skipping response cleaning');
+  }
+
+  // CONSOLIDATE CONTENT BY TYPE - NEW FEATURE
+  if (finalResponse.content && Array.isArray(finalResponse.content)) {
+    processingLog.push('Consolidating content array into content object by type...');
+    finalResponse.content = consolidateContentByType(finalResponse.content);
   }
 
   // Calculate final size and check if we're under the limit
@@ -251,6 +261,7 @@ function processClaudeResponseWithSizeControl(claudeResponse, requestPayload) {
     _processingInfo: {
       webSearchEnabled: !!responseOptions?.webSearch,
       cleaningApplied: !!responseOptions?.webSearch,
+      contentConsolidated: Array.isArray(claudeResponse.content), // Track if we consolidated
       originalSizeChars: originalSize,
       finalSizeChars: finalSize,
       sizeReductionPercent: responseOptions?.webSearch ? Math.round((originalSize - finalSize) / originalSize * 100) : 0,
@@ -278,6 +289,71 @@ function processClaudeResponseWithSizeControl(claudeResponse, requestPayload) {
   }
 
   return response;
+}
+
+// NEW FUNCTION: Consolidate content array into object by type
+function consolidateContentByType(contentArray) {
+  const consolidated = {};
+  
+  for (const item of contentArray) {
+    if (!item.type) continue;
+    
+    const type = item.type;
+    
+    // Initialize the type if it doesn't exist
+    if (!consolidated[type]) {
+      consolidated[type] = '';
+    }
+    
+    // Handle different content types
+    switch (type) {
+      case 'text':
+        // Join text content with newlines
+        if (item.text) {
+          consolidated[type] += (consolidated[type] ? '\n\n' : '') + item.text;
+        }
+        break;
+        
+      case 'thinking':
+        // Join thinking content with newlines
+        if (item.thinking) {
+          consolidated[type] += (consolidated[type] ? '\n\n' : '') + item.thinking;
+        }
+        break;
+        
+      case 'web_search_tool_result':
+        // For web search results, preserve the structure but consolidate
+        if (!consolidated[type]) {
+          consolidated[type] = {
+            type: 'web_search_tool_result',
+            content: []
+          };
+        }
+        if (item.content && Array.isArray(item.content)) {
+          consolidated[type].content.push(...item.content);
+        }
+        break;
+        
+      default:
+        // For other types, try to extract meaningful content
+        if (item.text) {
+          consolidated[type] += (consolidated[type] ? '\n\n' : '') + item.text;
+        } else if (typeof item === 'object') {
+          // For complex objects, store as JSON string (you might want to handle this differently)
+          consolidated[type] += (consolidated[type] ? '\n\n' : '') + JSON.stringify(item, null, 2);
+        }
+        break;
+    }
+  }
+  
+  // Clean up empty entries
+  Object.keys(consolidated).forEach(key => {
+    if (consolidated[key] === '' || (typeof consolidated[key] === 'object' && !consolidated[key].content?.length)) {
+      delete consolidated[key];
+    }
+  });
+  
+  return consolidated;
 }
 
 function deepCleanResponseWithCitations(obj) {
