@@ -91,9 +91,6 @@ export default async function handler(req, res) {
       
       console.log(`Triggering processing at: ${processUrl}`);
       
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000);
-      
       const response = await fetch(processUrl, {
         method: 'POST',
         headers: { 
