@@ -34,6 +34,37 @@ NEW ARCHITECTURE BENEFIT:
 
 DEBUGGING TIP: Check Vercel function logs for "Failed to trigger processing" errors.
 Manual trigger works 100% reliably: curl -X POST /api/process-queue -d '{"requestId":"..."}'
+
+
+// =================================================================
+// DEV NOTES for api/queue-request.js (Updated 2025-08-22)
+// =================================================================
+/*
+FIRE-AND-FORGET AUTO-TRIGGER ARCHITECTURE:
+
+PROBLEM SOLVED: 
+- Previous version tried to wait for Claude processing (2-10 minutes) with 10-second timeout
+- This caused AbortError and defeated the purpose of async processing
+
+NEW APPROACH:
+- Store request in database
+- Fire auto-trigger request and immediately return
+- Don't wait for process-queue response
+- Let async processing happen in background
+- Graceful fallback to manual trigger if auto-trigger fails
+
+BENEFITS:
+- queue-request returns immediately (sub-second response)
+- No timeouts or aborts
+- True async processing
+- Reliable manual fallback always available
+
+FLOW:
+1. Store request → instant success
+2. Fire trigger → don't wait for response
+3. Return success to Pack immediately
+4. Processing happens in background
+5. Webhook delivers result when ready
 */
 
 import { createClient } from '@supabase/supabase-js';
@@ -69,7 +100,7 @@ export default async function handler(req, res) {
 
     console.log(`Queueing request ${requestId} (with cost calculation)`);
 
-    // Store the complete request payload in Supabase (including modelPricing if present)
+    // Store the complete request payload in Supabase
     const { error } = await supabase
       .from('llm_requests')
       .insert({
@@ -85,39 +116,38 @@ export default async function handler(req, res) {
       throw error;
     }
 
-    // Auto-trigger processing
-    try {
-      const processUrl = `https://${req.headers.host}/api/process-queue`;
-      
-      console.log(`Triggering processing at: ${processUrl}`);
-      
-      const response = await fetch(processUrl, {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'User-Agent': 'Vercel-Internal'
-        },
-        body: JSON.stringify({ requestId }),
-        signal: controller.signal
-      });
-      
-      clearTimeout(timeoutId);
-      
-      if (!response.ok) {
-        throw new Error(`Processing trigger failed: ${response.status} ${response.statusText}`);
+    // FIRE-AND-FORGET auto-trigger (no waiting, no timeouts)
+    const processUrl = `https://${req.headers.host}/api/process-queue`;
+    
+    console.log(`Triggering background processing for ${requestId} at: ${processUrl}`);
+    
+    // Start processing in background - don't await the result
+    fetch(processUrl, {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        'User-Agent': 'Vercel-Internal-Async'
+      },
+      body: JSON.stringify({ requestId })
+    })
+    .then(response => {
+      if (response.ok) {
+        console.log(`Background processing started successfully for ${requestId}`);
+      } else {
+        console.log(`Auto-trigger returned ${response.status} for ${requestId} - manual trigger may be needed`);
       }
-      
-      console.log(`Processing triggered successfully for ${requestId}`);
-      
-    } catch (fetchError) {
-      console.error('Failed to trigger processing:', fetchError);
-      console.log(`Request ${requestId} is queued but processing may need manual trigger`);
-    }
+    })
+    .catch(err => {
+      console.log(`Auto-trigger failed for ${requestId}: ${err.message} - request remains queued for manual processing`);
+    });
 
+    // Return immediately - don't wait for Claude processing
     res.status(200).json({ 
       success: true, 
       requestId,
-      message: 'Request queued for processing'
+      message: 'Request queued and processing started in background',
+      status: 'queued',
+      note: 'Response will be delivered via webhook when processing completes'
     });
 
   } catch (error) {
