@@ -196,65 +196,52 @@ function processClaudeResponseWithSizeControl(claudeResponse, requestPayload) {
   const originalSize = JSON.stringify(claudeResponse).length;
   processingLog.push(`Original response size: ${originalSize} characters`);
 
-  // Only apply cleaning if web search was enabled
+  // Apply cleaning if web search was enabled
   if (responseOptions?.webSearch) {
-    processingLog.push('Web search detected, applying response cleaning, citation rebuilding, and content consolidation...');
-    console.log('Web search detected, applying response cleaning, citation rebuilding, and content consolidation...');
+    processingLog.push('Web search detected, applying response cleaning...');
+    console.log('Web search detected, applying response cleaning...');
 
-    let cleanedResponse;
-
-    // Try normal cleaning first
     try {
-      cleanedResponse = deepCleanResponseWithCitations(claudeResponse);
+      finalResponse = deepCleanResponseWithCitations(claudeResponse);
+      const responseSize = JSON.stringify(finalResponse).length;
+      processingLog.push(`Response size after cleaning: ${responseSize} characters`);
+      
+      if (responseSize > 45000) {
+        processingLog.push('Response still too large, applying aggressive cleaning...');
+        finalResponse = aggressiveCleanResponseWithCitations(claudeResponse);
+        const newSize = JSON.stringify(finalResponse).length;
+        processingLog.push(`Response size after aggressive cleaning: ${newSize} characters`);
+      }
     } catch (cleaningError) {
       console.error('Cleaning failed, using original response:', cleaningError);
       processingLog.push(`Cleaning failed: ${cleaningError.message}, using original response`);
+      finalResponse = claudeResponse;
     }
-    
-    if (cleanedResponse) {
-      // Check size - if still too large, use aggressive cleaning
-      const responseSize = JSON.stringify(cleanedResponse).length;
-      processingLog.push(`Response size after cleaning: ${responseSize} characters (${Math.round((originalSize - responseSize) / originalSize * 100)}% reduction)`);
-      console.log(`Response size after cleaning: ${responseSize} characters`);
-
-      if (responseSize > 45000) { // Leave some buffer under 50k limit
-        processingLog.push('Response still too large, applying aggressive cleaning...');
-        console.log('Response still too large, applying aggressive cleaning...');
-        try {
-          cleanedResponse = aggressiveCleanResponseWithCitations(claudeResponse);
-          const newSize = JSON.stringify(cleanedResponse).length;
-          processingLog.push(`Response size after aggressive cleaning: ${newSize} characters (${Math.round((originalSize - newSize) / originalSize * 100)}% total reduction)`);
-          console.log(`Response size after aggressive cleaning: ${newSize} characters`);
-        } catch (aggressiveError) {
-          console.error('Aggressive cleaning failed:', aggressiveError);
-          processingLog.push(`Aggressive cleaning failed: ${aggressiveError.message}, using standard cleaned response`);
-        }
-      }
-
-      finalResponse = cleanedResponse;
-    }
-  } else {
-    processingLog.push('No web search used, skipping response cleaning');
-    console.log('No web search used, skipping response cleaning');
   }
 
-  // CONSOLIDATE CONTENT BY TYPE - NEW FEATURE
+  // STANDARDIZE CONTENT STRUCTURE - Only flatten when NOT in JSON mode
   if (finalResponse.content && Array.isArray(finalResponse.content)) {
-    processingLog.push('Consolidating content array into content object by type...');
-    finalResponse.content = consolidateContentByType(finalResponse.content);
+    if (!responseOptions?.jsonMode) {
+      // For regular text responses, flatten to consistent format
+      const textParts = finalResponse.content
+        .filter(item => item.type === 'text')
+        .map(item => item.text)
+        .join('');
+      
+      finalResponse.content = {
+        type: 'text',
+        text: textParts
+      };
+      
+      processingLog.push('Standardized content structure to object format (non-JSON mode)');
+    } else {
+      // For JSON mode, preserve the original array structure
+      // The content might be structured JSON that shouldn't be flattened
+      processingLog.push('Preserved original content array structure (JSON mode)');
+    }
   }
 
-  // Calculate final size and check if we're under the limit
-  const finalSize = JSON.stringify(finalResponse).length;
-  processingLog.push(`Final response size: ${finalSize} characters`);
-  
-  // Warn if still approaching limit
-  if (finalSize > 45000) {
-    processingLog.push(`⚠️  WARNING: Response size ${finalSize} approaching 50k limit`);
-    console.warn(`Response size ${finalSize} approaching 50k limit for request ${requestPayload.requestId}`);
-  }
-
-  // Build final response
+  // Build final response with consistent structure
   const response = {
     ...finalResponse,
     requestId: requestPayload.requestId,
@@ -262,13 +249,13 @@ function processClaudeResponseWithSizeControl(claudeResponse, requestPayload) {
     _processingInfo: {
       webSearchEnabled: !!responseOptions?.webSearch,
       cleaningApplied: !!responseOptions?.webSearch,
-      contentConsolidated: Array.isArray(claudeResponse.content), // Track if we consolidated
       originalSizeChars: originalSize,
-      finalSizeChars: finalSize,
-      sizeReductionPercent: responseOptions?.webSearch ? Math.round((originalSize - finalSize) / originalSize * 100) : 0,
+      finalSizeChars: JSON.stringify(finalResponse).length,
       processingLog: processingLog,
-      timestamp: new Date().toISOString(),
-      underSizeLimit: finalSize < 50000
+      jsonMode: !!responseOptions?.jsonMode,
+      contentStructure: responseOptions?.jsonMode ? 'preserved_array' : 'standardized_object',
+      parseWith: responseOptions?.jsonMode ? 'content[0].text' : 'content.text',
+      timestamp: new Date().toISOString()
     }
   };
 
@@ -279,7 +266,7 @@ function processClaudeResponseWithSizeControl(claudeResponse, requestPayload) {
     const outputCost = (output_tokens / 1000000) * modelPricing.output;
 
     response.cost = {
-      model: requestPayload.claudeRequest?.model || 'claude-sonnet-4-0',
+      model: requestPayload.claudeRequest?.model || 'claude-sonnet-4-20250514',
       inputTokens: input_tokens,
       outputTokens: output_tokens,
       inputCost: parseFloat(inputCost.toFixed(6)),
