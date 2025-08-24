@@ -46,7 +46,7 @@ const supabase = createClient(
 );
 
 export const config = {
-  maxDuration: 800, // 13 minutes
+  maxDuration: 800, // 13+ minutes (Pro plan limit)
 };
 
 export default async function handler(req, res) {
@@ -199,7 +199,7 @@ async function callClaudeAPI(payload) {
       'anthropic-version': '2023-06-01'
     },
     body: JSON.stringify(claudeRequest),  // Send as-is from Pack!
-    signal: AbortSignal.timeout(600000) // 10 minutes instead of default ~60-90s
+    signal: AbortSignal.timeout(780000) // 10 minutes instead of default ~60-90s
   });
 
   if (!response.ok) {
@@ -226,7 +226,7 @@ function processClaudeResponseWithSizeControl(claudeResponse, requestPayload) {
     processingLog.push('Web search detected, applying response cleaning...');
 
     try {
-      finalResponse = deepCleanResponseWithCitations(claudeResponse);
+      finalResponse = deepCleanResponseWithCitations(finalResponse);
       const responseSize = JSON.stringify(finalResponse).length;
       processingLog.push(`Response size after cleaning: ${responseSize} characters`);
 
