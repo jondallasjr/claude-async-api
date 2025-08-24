@@ -93,8 +93,8 @@ export default async function handler(req, res) {
     const { requestId, codaWebhookUrl, codaApiToken } = req.body;
 
     if (!requestId || !codaWebhookUrl || !codaApiToken) {
-      return res.status(400).json({ 
-        error: 'Missing required fields: requestId, codaWebhookUrl, codaApiToken' 
+      return res.status(400).json({
+        error: 'Missing required fields: requestId, codaWebhookUrl, codaApiToken'
       });
     }
 
@@ -116,34 +116,45 @@ export default async function handler(req, res) {
       throw error;
     }
 
+    // Replace only the auto-trigger section in your queue-request.js
+    // Everything else stays exactly the same
+
     // FIRE-AND-FORGET auto-trigger (no waiting, no timeouts)
     const processUrl = `https://${req.headers.host}/api/process-queue`;
-    
+
     console.log(`Triggering background processing for ${requestId} at: ${processUrl}`);
-    
+
     // Start processing in background - don't await the result
     fetch(processUrl, {
       method: 'POST',
-      headers: { 
+      headers: {
         'Content-Type': 'application/json',
         'User-Agent': 'Vercel-Internal-Async'
       },
       body: JSON.stringify({ requestId })
     })
-    .then(response => {
-      if (response.ok) {
-        console.log(`Background processing started successfully for ${requestId}`);
-      } else {
-        console.log(`Auto-trigger returned ${response.status} for ${requestId} - manual trigger may be needed`);
-      }
-    })
-    .catch(err => {
-      console.log(`Auto-trigger failed for ${requestId}: ${err.message} - request remains queued for manual processing`);
-    });
+      .then(async response => {
+        // Fixed: Handle async operations properly in .then()
+        try {
+          if (response.ok) {
+            console.log(`Background processing started successfully for ${requestId}`);
+          } else {
+            const errorText = await response.text();
+            console.log(`Auto-trigger returned ${response.status} for ${requestId}: ${errorText.substring(0, 200)} - manual trigger may be needed`);
+          }
+        } catch (responseError) {
+          console.log(`Auto-trigger response error for ${requestId}: ${responseError.message} - manual trigger may be needed`);
+        }
+      })
+      .catch(err => {
+        console.log(`Auto-trigger failed for ${requestId}: ${err.message} - request remains queued for manual processing`);
+      });
+
+    // CRITICAL: Don't add any await or return here - let it run in background
 
     // Return immediately - don't wait for Claude processing
-    res.status(200).json({ 
-      success: true, 
+    res.status(200).json({
+      success: true,
       requestId,
       message: 'Request queued and processing started in background',
       status: 'queued',
@@ -152,9 +163,9 @@ export default async function handler(req, res) {
 
   } catch (error) {
     console.error('Queue error:', error);
-    res.status(500).json({ 
-      error: 'Failed to queue request', 
-      details: error.message 
+    res.status(500).json({
+      error: 'Failed to queue request',
+      details: error.message
     });
   }
 }
