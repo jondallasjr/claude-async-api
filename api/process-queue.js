@@ -244,52 +244,52 @@ function processClaudeResponseWithSizeControl(claudeResponse, requestPayload) {
   }
 
   // STANDARDIZE CONTENT STRUCTURE - Always flatten to content.text
-if (finalResponse.content && Array.isArray(finalResponse.content)) {
-  
-  // Extract thinking blocks first (before signature removal handles them)
-  const thinkingBlocks = finalResponse.content
-    .filter(item => item.type === 'thinking')
-    .map(item => item.thinking);
-  
-  // Extract text blocks
-  const textBlocks = finalResponse.content
-    .filter(item => item.type === 'text')
-    .map(item => item.text);
-    
-  let finalText = '';
-  
-  if (responseOptions?.jsonMode && textBlocks.length > 0) {
-    // For JSON mode, parse the JSON-escaped content
-    try {
-      const jsonString = textBlocks[0];
-      const parsedContent = JSON.parse(jsonString);
-      
-      // Extract the actual formatted content (Markdown, HTML, etc.)
-      finalText = parsedContent.content || jsonString;
-      processingLog.push('Extracted formatted content from JSON wrapper');
-      
-    } catch (parseError) {
-      // If JSON parsing fails, use raw text
+  if (finalResponse.content && Array.isArray(finalResponse.content)) {
+
+    // Extract thinking blocks first (before signature removal handles them)
+    const thinkingBlocks = finalResponse.content
+      .filter(item => item.type === 'thinking')
+      .map(item => item.thinking);
+
+    // Extract text blocks
+    const textBlocks = finalResponse.content
+      .filter(item => item.type === 'text')
+      .map(item => item.text);
+
+    let finalText = '';
+
+    if (responseOptions?.jsonMode && textBlocks.length > 0) {
+      // For JSON mode, parse the JSON-escaped content
+      try {
+        const jsonString = textBlocks[0];
+        const parsedContent = JSON.parse(jsonString);
+
+        // Extract the actual formatted content (Markdown, HTML, etc.)
+        finalText = parsedContent.content || jsonString;
+        processingLog.push('Extracted formatted content from JSON wrapper');
+
+      } catch (parseError) {
+        // If JSON parsing fails, use raw text
+        finalText = textBlocks.join('\n\n');
+        processingLog.push(`JSON parsing failed, using raw text: ${parseError.message}`);
+      }
+    } else {
+      // For regular mode, just join text blocks
       finalText = textBlocks.join('\n\n');
-      processingLog.push(`JSON parsing failed, using raw text: ${parseError.message}`);
+      processingLog.push('Combined text blocks into single content');
     }
-  } else {
-    // For regular mode, just join text blocks
-    finalText = textBlocks.join('\n\n');
-    processingLog.push('Combined text blocks into single content');
+
+    // Always use the same structure: content.text
+    finalResponse.content = {
+      type: 'text',
+      text: finalText
+    };
+
+    // Store thinking separately if it exists and user wants it
+    if (thinkingBlocks.length > 0 && responseOptions?.includeThinking) {
+      finalResponse.thinking_content = thinkingBlocks.join('\n\n');
+    }
   }
-  
-  // Always use the same structure: content.text
-  finalResponse.content = {
-    type: 'text',
-    text: finalText
-  };
-  
-  // Store thinking separately if it exists and user wants it
-  if (thinkingBlocks.length > 0 && responseOptions?.includeThinking) {
-    finalResponse.thinking_content = thinkingBlocks.join('\n\n');
-  }
-}
 
   // Build final response with consistent structure
   const response = {
@@ -303,8 +303,9 @@ if (finalResponse.content && Array.isArray(finalResponse.content)) {
       finalSizeChars: JSON.stringify(finalResponse).length,
       processingLog: processingLog,
       jsonMode: !!responseOptions?.jsonMode,
-      contentStructure: responseOptions?.jsonMode ? 'preserved_array' : 'standardized_object',
-      parseWith: responseOptions?.jsonMode ? 'content[0].text' : 'content.text',
+      contentStructure: 'standardized_object', // ✅ Always the same now!
+      parseWith: 'content.text', // ✅ Always the same path!
+      thinkingIncluded: !!(responseOptions?.includeThinking && finalResponse.thinking_content),
       timestamp: new Date().toISOString()
     }
   };
