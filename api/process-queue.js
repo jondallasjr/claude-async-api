@@ -213,14 +213,15 @@ async function callClaudeAPI(payload) {
 function processClaudeResponseWithSizeControl(claudeResponse, requestPayload) {
   const { modelPricing, responseOptions } = requestPayload;
 
-  let finalResponse = claudeResponse;
+  // ALWAYS remove signatures (they're just bloat)
+  let finalResponse = removeSignaturesFromResponse(claudeResponse);
   const processingLog = [];
 
-  // Calculate original size
-  const originalSize = JSON.stringify(claudeResponse).length;
+  // Calculate original size AFTER signature removal
+  const originalSize = JSON.stringify(finalResponse).length;
   processingLog.push(`Original response size: ${originalSize} characters`);
 
-  // Only apply cleaning if web search was enabled
+  // Only apply citation cleaning if web search was enabled
   if (responseOptions?.webSearch) {
     processingLog.push('Web search detected, applying citation cleaning...');
     console.log('Web search detected, applying citation cleaning...');
@@ -232,11 +233,11 @@ function processClaudeResponseWithSizeControl(claudeResponse, requestPayload) {
       console.error('Cleaning failed, using original response:', cleaningError);
       processingLog.push(`Cleaning failed: ${cleaningError.message}, using original response`);
     }
-    
+
     if (cleanedResponse) {
       const responseSize = JSON.stringify(cleanedResponse).length;
       processingLog.push(`Response size after cleaning: ${responseSize} characters`);
-      
+
       if (responseSize > 45000) {
         processingLog.push('Response still too large, applying aggressive cleaning...');
         try {
@@ -287,7 +288,7 @@ function processClaudeResponseWithSizeControl(claudeResponse, requestPayload) {
       jsonContentMode: !!responseOptions?.jsonContent,
       includeWrapperMode: true
     };
-    
+
     return finalResponse;
   } else {
     // Return simplified format with just content
