@@ -11,11 +11,10 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.52.0",
-    "@supabase/supabase-js": "^2.39.0"
+    "@supabase/supabase-js": "^2.39.7"
   },
   "devDependencies": {
-    "@types/node": "^20.0.0",
-    "@supabase/supabase-js": "^2.39.7"
+    "@types/node": "^20.0.0"
   },
   "engines": {
     "node": "22.x"
