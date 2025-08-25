@@ -1,6 +1,7 @@
 {
   "name": "claude-async-api",
   "version": "1.0.0",
+  "type": "module",
   "description": "Async Claude API processing for Coda",
   "main": "index.js",
   "scripts": {
@@ -13,9 +14,10 @@
     "@supabase/supabase-js": "^2.39.0"
   },
   "devDependencies": {
-    "@types/node": "^20.0.0"
+    "@types/node": "^20.0.0",
+    "@supabase/supabase-js": "^2.39.7"
   },
   "engines": {
-    "node": "18.x"
+    "node": "22.x"
   }
 }

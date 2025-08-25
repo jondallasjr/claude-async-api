@@ -46,7 +46,7 @@ const supabase = createClient(
 );
 
 export const config = {
-  maxDuration: 900, // 13+ minutes (Pro plan limit)
+  maxDuration: 800, // 13+ minutes (Pro plan limit)
 };
 
 export default async function handler(req, res) {
