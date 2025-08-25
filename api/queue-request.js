@@ -122,33 +122,39 @@ export default async function handler(req, res) {
     // FIRE-AND-FORGET auto-trigger (no waiting, no timeouts)
     const processUrl = `https://${req.headers.host}/api/process-queue`;
 
-    console.log(`Triggering background processing for ${requestId} at: ${processUrl}`);
+    console.log(`Auto-triggering processing for ${requestId}`);
 
-    // Start processing in background - don't await the result
-    fetch(processUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'User-Agent': 'Vercel-Internal-Async'
-      },
-      body: JSON.stringify({ requestId })
-    })
-      .then(async response => {
-        // Fixed: Handle async operations properly in .then()
-        try {
-          if (response.ok) {
-            console.log(`Background processing started successfully for ${requestId}`);
-          } else {
-            const errorText = await response.text();
-            console.log(`Auto-trigger returned ${response.status} for ${requestId}: ${errorText.substring(0, 200)} - manual trigger may be needed`);
-          }
-        } catch (responseError) {
-          console.log(`Auto-trigger response error for ${requestId}: ${responseError.message} - manual trigger may be needed`);
-        }
-      })
-      .catch(err => {
-        console.log(`Auto-trigger failed for ${requestId}: ${err.message} - request remains queued for manual processing`);
+    try {
+      // Wait up to 5 seconds for auto-trigger to start
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+      const triggerResponse = await fetch(processUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': 'Vercel-Internal'
+        },
+        body: JSON.stringify({ requestId }),
+        signal: controller.signal
       });
+
+      clearTimeout(timeoutId);
+
+      if (triggerResponse.ok) {
+        console.log(`✅ Auto-trigger started for ${requestId}`);
+      } else {
+        const errorText = await triggerResponse.text();
+        console.log(`❌ Auto-trigger failed ${triggerResponse.status} for ${requestId}: ${errorText.substring(0, 100)}`);
+      }
+
+    } catch (triggerError) {
+      if (triggerError.name === 'AbortError') {
+        console.log(`⏰ Auto-trigger timeout for ${requestId} - processing may still start`);
+      } else {
+        console.log(`💥 Auto-trigger error for ${requestId}: ${triggerError.message}`);
+      }
+    }
 
     // CRITICAL: Don't add any await or return here - let it run in background
 

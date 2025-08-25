@@ -46,7 +46,7 @@ const supabase = createClient(
 );
 
 export const config = {
-  maxDuration: 800, // 13+ minutes (Pro plan limit)
+  maxDuration: 900, // 13+ minutes (Pro plan limit)
 };
 
 export default async function handler(req, res) {
@@ -199,7 +199,7 @@ async function callClaudeAPI(payload) {
       'anthropic-version': '2023-06-01'
     },
     body: JSON.stringify(claudeRequest),  // Send as-is from Pack!
-    signal: AbortSignal.timeout(780000) // 10 minutes instead of default ~60-90s
+    signal: AbortSignal.timeout(720000) // 10 minutes instead of default ~60-90s
   });
 
   if (!response.ok) {
@@ -213,110 +213,54 @@ async function callClaudeAPI(payload) {
 function processClaudeResponseWithSizeControl(claudeResponse, requestPayload) {
   const { modelPricing, responseOptions } = requestPayload;
 
-  // REMOVE SIGNATURES FIRST - they're just bloat for end users
-  let finalResponse = removeSignaturesFromResponse(claudeResponse);
+  let finalResponse = claudeResponse;
   const processingLog = [];
 
-  // Calculate original size AFTER signature removal  
-  const originalSize = JSON.stringify(finalResponse).length;
-  processingLog.push(`Original response size: ${originalSize} characters (signatures removed)`);
+  // Calculate original size
+  const originalSize = JSON.stringify(claudeResponse).length;
+  processingLog.push(`Original response size: ${originalSize} characters`);
 
-  // Apply cleaning if web search was enabled
+  // Only apply cleaning if web search was enabled
   if (responseOptions?.webSearch) {
-    processingLog.push('Web search detected, applying response cleaning...');
+    processingLog.push('Web search detected, applying citation cleaning...');
+    console.log('Web search detected, applying citation cleaning...');
 
+    let cleanedResponse;
     try {
-      finalResponse = deepCleanResponseWithCitations(finalResponse);
-      const responseSize = JSON.stringify(finalResponse).length;
-      processingLog.push(`Response size after cleaning: ${responseSize} characters`);
-
-      if (responseSize > 45000) {
-        processingLog.push('Response still too large, applying aggressive cleaning...');
-        finalResponse = aggressiveCleanResponseWithCitations(claudeResponse);
-        const newSize = JSON.stringify(finalResponse).length;
-        processingLog.push(`Response size after aggressive cleaning: ${newSize} characters`);
-      }
+      cleanedResponse = deepCleanResponseWithCitations(claudeResponse);
     } catch (cleaningError) {
       console.error('Cleaning failed, using original response:', cleaningError);
       processingLog.push(`Cleaning failed: ${cleaningError.message}, using original response`);
-      finalResponse = claudeResponse;
     }
-  }
-
-  // STANDARDIZE CONTENT STRUCTURE - Always flatten to content.text
-  if (finalResponse.content && Array.isArray(finalResponse.content)) {
-
-    // Extract thinking blocks first (before signature removal handles them)
-    const thinkingBlocks = finalResponse.content
-      .filter(item => item.type === 'thinking')
-      .map(item => item.thinking);
-
-    // Extract text blocks
-    const textBlocks = finalResponse.content
-      .filter(item => item.type === 'text')
-      .map(item => item.text);
-
-    let finalText = '';
-
-    if (responseOptions?.jsonMode && textBlocks.length > 0) {
-      // For JSON mode, parse the JSON-escaped content
-      try {
-        const jsonString = textBlocks[0];
-        const parsedContent = JSON.parse(jsonString);
-
-        // Extract the actual formatted content (Markdown, HTML, etc.)
-        finalText = parsedContent.content || jsonString;
-        processingLog.push('Extracted formatted content from JSON wrapper');
-
-      } catch (parseError) {
-        // If JSON parsing fails, use raw text
-        finalText = textBlocks.join('\n\n');
-        processingLog.push(`JSON parsing failed, using raw text: ${parseError.message}`);
+    
+    if (cleanedResponse) {
+      const responseSize = JSON.stringify(cleanedResponse).length;
+      processingLog.push(`Response size after cleaning: ${responseSize} characters`);
+      
+      if (responseSize > 45000) {
+        processingLog.push('Response still too large, applying aggressive cleaning...');
+        try {
+          cleanedResponse = aggressiveCleanResponseWithCitations(claudeResponse);
+          const newSize = JSON.stringify(cleanedResponse).length;
+          processingLog.push(`Final size after aggressive cleaning: ${newSize} characters`);
+        } catch (aggressiveError) {
+          console.error('Aggressive cleaning failed:', aggressiveError);
+        }
       }
-    } else {
-      // For regular mode, just join text blocks
-      finalText = textBlocks.join('\n\n');
-      processingLog.push('Combined text blocks into single content');
-    }
 
-    // Always use the same structure: content.text
-    finalResponse.content = {
-      type: 'text',
-      text: finalText
-    };
-
-    // Store thinking separately if it exists and user wants it
-    if (thinkingBlocks.length > 0 && responseOptions?.includeThinking) {
-      finalResponse.thinking_content = thinkingBlocks.join('\n\n');
+      finalResponse = cleanedResponse;
     }
+  } else {
+    processingLog.push('No web search used, skipping response cleaning');
   }
 
-  // Build final response with consistent structure
-  const response = {
-    ...finalResponse,
-    requestId: requestPayload.requestId,
-    completedAt: new Date().toISOString(),
-    _processingInfo: {
-      webSearchEnabled: !!responseOptions?.webSearch,
-      cleaningApplied: !!responseOptions?.webSearch,
-      originalSizeChars: originalSize,
-      finalSizeChars: JSON.stringify(finalResponse).length,
-      processingLog: processingLog,
-      jsonMode: !!responseOptions?.jsonMode,
-      contentStructure: 'standardized_object', // ✅ Always the same now!
-      parseWith: 'content.text', // ✅ Always the same path!
-      thinkingIncluded: !!(responseOptions?.includeThinking && finalResponse.thinking_content),
-      timestamp: new Date().toISOString()
-    }
-  };
-
-  // Add cost calculation
+  // Add cost calculation (always included)
   if (modelPricing && claudeResponse.usage) {
     const { input_tokens, output_tokens } = claudeResponse.usage;
     const inputCost = (input_tokens / 1000000) * modelPricing.input;
     const outputCost = (output_tokens / 1000000) * modelPricing.output;
 
-    response.cost = {
+    finalResponse.cost = {
       model: requestPayload.claudeRequest?.model || 'claude-sonnet-4-20250514',
       inputTokens: input_tokens,
       outputTokens: output_tokens,
@@ -327,7 +271,40 @@ function processClaudeResponseWithSizeControl(claudeResponse, requestPayload) {
     };
   }
 
-  return response;
+  // Add metadata
+  finalResponse.requestId = requestPayload.requestId;
+  finalResponse.completedAt = new Date().toISOString();
+
+  // NEW: Handle response format based on includeWrapper parameter
+  if (responseOptions?.includeWrapper) {
+    // Return full Claude response with metadata
+    finalResponse._processingInfo = {
+      webSearchEnabled: !!responseOptions?.webSearch,
+      cleaningApplied: !!responseOptions?.webSearch,
+      originalSizeChars: originalSize,
+      finalSizeChars: JSON.stringify(finalResponse).length,
+      processingLog: processingLog,
+      jsonContentMode: !!responseOptions?.jsonContent,
+      includeWrapperMode: true
+    };
+    
+    return finalResponse;
+  } else {
+    // Return simplified format with just content
+    return {
+      content: finalResponse.content?.[0]?.text || '',
+      requestId: requestPayload.requestId,
+      completedAt: new Date().toISOString(),
+      ...(finalResponse.cost && { cost: finalResponse.cost }),
+      _processingInfo: {
+        webSearchEnabled: !!responseOptions?.webSearch,
+        cleaningApplied: !!responseOptions?.webSearch,
+        jsonContentMode: !!responseOptions?.jsonContent,
+        includeWrapperMode: false,
+        processingLog: processingLog
+      }
+    };
+  }
 }
 
 // Consolidate content array into object by type
