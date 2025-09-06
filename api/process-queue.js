@@ -119,7 +119,8 @@ export default async function handler(req, res) {
     console.log('Processed response:', JSON.stringify(processedResponse, null, 2));
 
     // Mark as completed - triggers webhook
-    await supabase
+    // Mark as completed - triggers webhook
+    const { error: updateError } = await supabase
       .from('llm_requests')
       .update({
         status: 'completed',
@@ -127,6 +128,11 @@ export default async function handler(req, res) {
         completed_at: new Date().toISOString()
       })
       .eq('request_id', requestId);
+
+    if (updateError) {
+      console.error(`Failed to update request ${requestId}:`, updateError);
+      throw new Error(`Database update failed: ${updateError.message}`);
+    }
 
     res.status(200).json({ success: true });
 
@@ -172,52 +178,52 @@ function removeSignaturesFromResponse(obj) {
 
 async function callClaudeAPI(payload) {
   const startTime = Date.now();
-  
+
   try {
     // =================== INPUT VALIDATION ===================
-    
+
     // Extract the pre-built Claude request and metadata
     const { claudeRequest, userApiKey, requestId } = payload;
-    
+
     if (!claudeRequest) {
       throw new Error('No claudeRequest found in payload - ensure Pack is sending complete request');
     }
-    
+
     // Validate claudeRequest structure
     if (!claudeRequest.model) {
       throw new Error('Invalid claudeRequest: missing model field');
     }
-    
+
     if (!claudeRequest.messages || !Array.isArray(claudeRequest.messages)) {
       throw new Error('Invalid claudeRequest: messages must be an array');
     }
-    
+
     if (claudeRequest.messages.length === 0) {
       throw new Error('Invalid claudeRequest: messages array is empty');
     }
-    
+
     // =================== API KEY VALIDATION ===================
-    
+
     // Use system API key (until Pack auth is fixed)
     const apiKey = process.env.ANTHROPIC_API_KEY;
-    
+
     if (!apiKey) {
       throw new Error('No system API key configured in environment variables');
     }
-    
+
     // Validate API key format and length
     if (apiKey.length < 50) {
       throw new Error(`Invalid API key: length=${apiKey.length}, expected >50 chars (current key may be truncated)`);
     }
-    
+
     if (!apiKey.startsWith('sk-ant-')) {
       console.warn(`⚠️ API key doesn't start with expected prefix 'sk-ant-' - this may indicate a configuration issue`);
     }
-    
+
     console.log(`✅ API Key validation passed - Length: ${apiKey.length}, Prefix: ${apiKey.substring(0, 10)}...`);
-    
+
     // =================== REQUEST LOGGING ===================
-    
+
     const requestSummary = {
       requestId: requestId || 'unknown',
       model: claudeRequest.model,
@@ -228,19 +234,19 @@ async function callClaudeAPI(payload) {
       maxTokens: claudeRequest.max_tokens,
       temperature: claudeRequest.temperature
     };
-    
+
     console.log(`📤 Sending request to Claude API:`, JSON.stringify(requestSummary, null, 2));
-    
+
     // Log full request in development (but truncate for production to avoid log spam)
     if (process.env.NODE_ENV === 'development') {
       console.log('Full request payload:', JSON.stringify(claudeRequest, null, 2));
     }
-    
+
     // =================== API REQUEST WITH RETRY LOGIC ===================
-    
+
     let lastError;
     const maxRetries = 2; // Total of 3 attempts (1 initial + 2 retries)
-    
+
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
         if (attempt > 0) {
@@ -248,7 +254,7 @@ async function callClaudeAPI(payload) {
           console.log(`⏳ Retry attempt ${attempt}/${maxRetries} after ${backoffMs}ms delay...`);
           await new Promise(resolve => setTimeout(resolve, backoffMs));
         }
-        
+
         // Create AbortController for timeout
         const controller = new AbortController();
         const timeoutMs = 720000; // 12 minutes
@@ -256,9 +262,9 @@ async function callClaudeAPI(payload) {
           controller.abort();
           console.error(`⏰ Request timeout after ${timeoutMs}ms`);
         }, timeoutMs);
-        
+
         console.log(`🚀 Attempt ${attempt + 1}: Sending request to Claude API...`);
-        
+
         // Send the request exactly as built by the Pack
         const response = await fetch('https://api.anthropic.com/v1/messages', {
           method: 'POST',
@@ -271,23 +277,23 @@ async function callClaudeAPI(payload) {
           body: JSON.stringify(claudeRequest),
           signal: controller.signal
         });
-        
+
         clearTimeout(timeoutId);
-        
+
         const responseTime = Date.now() - startTime;
         console.log(`📡 Response received in ${responseTime}ms with status: ${response.status}`);
-        
+
         // =================== RESPONSE STATUS HANDLING ===================
-        
+
         if (response.ok) {
           // Success case
           const responseData = await response.json();
-          
+
           // Validate response structure
           if (!responseData.content) {
             throw new Error('Invalid Claude response: missing content field');
           }
-          
+
           console.log(`✅ Claude API success:`, {
             model: responseData.model,
             usage: responseData.usage,
@@ -295,28 +301,28 @@ async function callClaudeAPI(payload) {
             hasThinking: responseData.content?.some(item => item.type === 'thinking'),
             responseTimeMs: responseTime
           });
-          
+
           return responseData;
-          
+
         } else {
           // Handle different error status codes
           const errorText = await response.text();
           let errorDetails;
-          
+
           try {
             errorDetails = JSON.parse(errorText);
           } catch {
             errorDetails = { message: errorText };
           }
-          
+
           const error = new Error(`Claude API error (${response.status}): ${errorDetails.error?.message || errorDetails.message || errorText}`);
           error.status = response.status;
           error.details = errorDetails;
-          
+
           // Determine if this error is retryable
           const retryableStatuses = [429, 500, 502, 503, 504]; // Rate limit, server errors
           const isRetryable = retryableStatuses.includes(response.status);
-          
+
           console.error(`❌ Claude API error (attempt ${attempt + 1}):`, {
             status: response.status,
             error: errorDetails.error?.message || errorDetails.message,
@@ -324,7 +330,7 @@ async function callClaudeAPI(payload) {
             isRetryable,
             willRetry: isRetryable && attempt < maxRetries
           });
-          
+
           // Rate limiting specific handling
           if (response.status === 429) {
             const retryAfter = response.headers.get('retry-after');
@@ -332,30 +338,30 @@ async function callClaudeAPI(payload) {
               console.log(`⏱️ Rate limited. Retry after: ${retryAfter} seconds`);
             }
           }
-          
+
           // Don't retry on client errors (except rate limiting)
           if (response.status >= 400 && response.status < 500 && response.status !== 429) {
             throw error;
           }
-          
+
           lastError = error;
-          
+
           // If this was the last attempt, throw the error
           if (attempt >= maxRetries) {
             throw error;
           }
-          
+
           // Otherwise continue to retry
         }
-        
+
       } catch (fetchError) {
         // Handle fetch/network errors
         lastError = fetchError;
-        
+
         const isTimeoutError = fetchError.name === 'AbortError';
         const isNetworkError = fetchError.name === 'TypeError' && fetchError.message.includes('fetch');
         const isRetryableError = isTimeoutError || isNetworkError;
-        
+
         console.error(`💥 Network/fetch error (attempt ${attempt + 1}):`, {
           name: fetchError.name,
           message: fetchError.message,
@@ -363,32 +369,32 @@ async function callClaudeAPI(payload) {
           isNetwork: isNetworkError,
           willRetry: isRetryableError && attempt < maxRetries
         });
-        
+
         // Don't retry on non-retryable fetch errors
         if (!isRetryableError || attempt >= maxRetries) {
           if (isTimeoutError) {
             throw new Error(`Request timeout after 12 minutes - Claude API may be experiencing delays`);
           }
-          
+
           if (isNetworkError) {
             throw new Error(`Network error connecting to Claude API: ${fetchError.message}`);
           }
-          
+
           throw fetchError;
         }
-        
+
         // Continue to retry for retryable errors
       }
     }
-    
+
     // If we somehow get here, throw the last error
     throw lastError || new Error('Unknown error in Claude API call');
-    
+
   } catch (error) {
     // =================== FINAL ERROR HANDLING ===================
-    
+
     const totalTime = Date.now() - startTime;
-    
+
     console.error('❌ Claude API call failed:', {
       requestId: payload.requestId || 'unknown',
       error: error.message,
@@ -397,16 +403,16 @@ async function callClaudeAPI(payload) {
       totalTimeMs: totalTime,
       stack: error.stack?.substring(0, 500)
     });
-    
+
     // Enhance error message with context
     if (error.message.includes('fetch failed')) {
       throw new Error(`Claude API connection failed (${totalTime}ms): This usually indicates network issues or API key problems. Original error: ${error.message}`);
     }
-    
+
     if (error.message.includes('timeout')) {
       throw new Error(`Claude API timeout (${totalTime}ms): Request took longer than 12 minutes. This may indicate a very complex request or API performance issues.`);
     }
-    
+
     // Re-throw with enhanced context
     throw new Error(`Claude API error after ${totalTime}ms: ${error.message}`);
   }
@@ -425,7 +431,7 @@ async function checkClaudeAPIHealth() {
       },
       requestId: "health_check"
     };
-    
+
     const result = await callClaudeAPI(testPayload);
     return { healthy: true, response: result.content?.[0]?.text };
   } catch (error) {

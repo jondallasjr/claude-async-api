@@ -125,9 +125,9 @@ export default async function handler(req, res) {
     console.log(`Auto-triggering processing for ${requestId}`);
 
     try {
-      // Wait up to 5 seconds for auto-trigger to start
+      // Wait up to 30 seconds for auto-trigger to start
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      const timeoutId = setTimeout(() => controller.abort(), 30000);
 
       const triggerResponse = await fetch(processUrl, {
         method: 'POST',
