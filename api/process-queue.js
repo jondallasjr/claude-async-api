@@ -119,7 +119,6 @@ export default async function handler(req, res) {
     console.log('Processed response:', JSON.stringify(processedResponse, null, 2));
 
     // Mark as completed - triggers webhook
-    // Mark as completed - triggers webhook
     const { error: updateError } = await supabase
       .from('llm_requests')
       .update({
@@ -132,6 +131,33 @@ export default async function handler(req, res) {
     if (updateError) {
       console.error(`Failed to update request ${requestId}:`, updateError);
       throw new Error(`Database update failed: ${updateError.message}`);
+    }
+
+    // Direct webhook delivery (bypass pg_net issues)
+    try {
+      console.log(`Sending direct webhook for ${requestId}`);
+
+      const webhookResponse = await fetch(request.coda_webhook_url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${request.coda_api_token}`,
+          'User-Agent': 'Claude-Async/1.0'
+        },
+        body: JSON.stringify({
+          requestId: requestId,
+          status: 'completed'
+        }),
+        signal: AbortSignal.timeout(5000)
+      });
+
+      if (webhookResponse.ok) {
+        console.log(`Direct webhook delivered: ${webhookResponse.status}`);
+      } else {
+        console.log(`Direct webhook failed: ${webhookResponse.status}`);
+      }
+    } catch (webhookError) {
+      console.log(`Direct webhook error: ${webhookError.message}`);
     }
 
     res.status(200).json({ success: true });
