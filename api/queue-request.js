@@ -124,37 +124,25 @@ export default async function handler(req, res) {
 
     console.log(`Auto-triggering processing for ${requestId}`);
 
-    try {
-      // Wait up to 30 seconds for auto-trigger to start
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 120000);
-
-      const triggerResponse = await fetch(processUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'User-Agent': 'Vercel-Internal'
-        },
-        body: JSON.stringify({ requestId }),
-        signal: controller.signal
-      });
-
-      clearTimeout(timeoutId);
-
-      if (triggerResponse.ok) {
+    // Fire-and-forget: start processing but don't wait
+    fetch(processUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent': 'Vercel-Internal'
+      },
+      body: JSON.stringify({ requestId })
+    }).then(response => {
+      if (response.ok) {
         console.log(`✅ Auto-trigger started for ${requestId}`);
       } else {
-        const errorText = await triggerResponse.text();
-        console.log(`❌ Auto-trigger failed ${triggerResponse.status} for ${requestId}: ${errorText.substring(0, 100)}`);
+        response.text().then(errorText => {
+          console.log(`❌ Auto-trigger failed ${response.status} for ${requestId}: ${errorText.substring(0, 100)}`);
+        });
       }
-
-    } catch (triggerError) {
-      if (triggerError.name === 'AbortError') {
-        console.log(`⏰ Auto-trigger timeout for ${requestId} - processing may still start`);
-      } else {
-        console.log(`💥 Auto-trigger error for ${requestId}: ${triggerError.message}`);
-      }
-    }
+    }).catch(triggerError => {
+      console.log(`💥 Auto-trigger error for ${requestId}: ${triggerError.message}`);
+    });
 
     // CRITICAL: Don't add any await or return here - let it run in background
 
