@@ -125,6 +125,9 @@ export default async function handler(req, res) {
     console.log(`Auto-triggering processing for ${requestId}`);
 
     // Fire-and-forget: start processing but don't wait
+    console.log(`Auto-triggering processing for ${requestId}`);
+    console.log(`Process URL: ${processUrl}`);
+
     fetch(processUrl, {
       method: 'POST',
       headers: {
@@ -132,16 +135,17 @@ export default async function handler(req, res) {
         'User-Agent': 'Vercel-Internal'
       },
       body: JSON.stringify({ requestId })
-    }).then(response => {
+    }).then(async response => {
+      console.log(`Trigger response status: ${response.status}`);
       if (response.ok) {
         console.log(`✅ Auto-trigger started for ${requestId}`);
       } else {
-        response.text().then(errorText => {
-          console.log(`❌ Auto-trigger failed ${response.status} for ${requestId}: ${errorText.substring(0, 100)}`);
-        });
+        const errorText = await response.text();
+        console.log(`❌ Auto-trigger failed ${response.status} for ${requestId}: ${errorText}`);
       }
     }).catch(triggerError => {
       console.log(`💥 Auto-trigger error for ${requestId}: ${triggerError.message}`);
+      console.log(`💥 Full error:`, triggerError);
     });
 
     // CRITICAL: Don't add any await or return here - let it run in background
