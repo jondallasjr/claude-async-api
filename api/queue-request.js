@@ -127,14 +127,15 @@ export default async function handler(req, res) {
     // Fire-and-forget: start processing but don't wait
     console.log(`Auto-triggering processing for ${requestId}`);
     console.log(`Process URL: ${processUrl}`);
-
+    
     fetch(processUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'User-Agent': 'Vercel-Internal'
       },
-      body: JSON.stringify({ requestId })
+      body: JSON.stringify({ requestId }),
+      signal: AbortSignal.timeout(10000) // Short timeout just to detect hanging
     }).then(async response => {
       console.log(`Trigger response status: ${response.status}`);
       if (response.ok) {
