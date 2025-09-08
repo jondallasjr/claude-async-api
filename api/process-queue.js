@@ -298,7 +298,9 @@ async function callClaudeAPI(payload) {
             'Content-Type': 'application/json',
             'x-api-key': apiKey,
             'anthropic-version': '2023-06-01',
-            'User-Agent': 'Vercel-Function/1.0'
+            'User-Agent': 'Vercel-Function/1.0',
+            'Connection': 'keep-alive', 
+            'Keep-Alive': 'timeout=720' 
           },
           body: JSON.stringify(claudeRequest),
           signal: controller.signal
