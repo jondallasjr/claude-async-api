@@ -58,6 +58,12 @@ export default async function handler(req, res) {
 
   try {
     console.log(`Processing request ${requestId}`);
+    console.log(`🎯 Triggered by: ${req.headers['user-agent'] || 'Unknown'}`);
+    console.log(`📊 Trigger source details:`, {
+      userAgent: req.headers['user-agent'],
+      contentLength: req.headers['content-length'],
+      requestSource: req.headers['user-agent']?.includes('Supabase') ? 'pg_net' : 'other'
+    });
 
     // Get the request
     const { data: request, error: fetchError } = await supabase
