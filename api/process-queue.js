@@ -36,6 +36,7 @@ TODO: Investigate Pack authentication to restore user API key functionality
 */
 
 import { createClient } from '@supabase/supabase-js';
+/* 
 import { setGlobalDispatcher, Agent } from 'undici';
 
 // This extends the timeout globally for all fetch requests in this function
@@ -44,6 +45,7 @@ setGlobalDispatcher(new Agent({
   headersTimeout: 720_000,          // 12 minutes  
   bodyTimeout: 720_000              // 12 minutes
 }));
+*/
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
