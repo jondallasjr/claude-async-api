@@ -75,10 +75,16 @@ const supabase = createClient(
 );
 
 export default async function handler(req, res) {
+  // debug logging
+  console.log('Raw request body:', req.body);
+  console.log('Request headers:', req.headers);
+  console.log('Request method:', req.method);
+
   // Enable CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+
 
   if (req.method === 'OPTIONS') {
     res.status(200).end();
