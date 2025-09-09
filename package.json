@@ -11,7 +11,8 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.52.0",
-    "@supabase/supabase-js": "^2.39.7"
+    "@supabase/supabase-js": "^2.39.7",
+    "undici": "^6.0.0"
   },
   "devDependencies": {
     "@types/node": "^20.0.0"
