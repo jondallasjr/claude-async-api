@@ -32,13 +32,18 @@ STATUS HANDLING:
 - Handles already completed/failed requests gracefully
 - Detects stuck processing requests (>5 min) and resets them
 
-TIMEOUT PROTECTION:
-- maxDuration: 300 (5 minutes) for extended thinking and large responses
-
 TODO: Investigate Pack authentication to restore user API key functionality
 */
 
 import { createClient } from '@supabase/supabase-js';
+import { setGlobalDispatcher, Agent } from 'undici';
+
+// This extends the timeout globally for all fetch requests in this function
+setGlobalDispatcher(new Agent({
+  connect: { timeout: 720_000 },    // 12 minutes
+  headersTimeout: 720_000,          // 12 minutes  
+  bodyTimeout: 720_000              // 12 minutes
+}));
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -95,7 +100,7 @@ export default async function handler(req, res) {
 
     if (request.status === 'processing') {
       const processingTime = Date.now() - new Date(request.processing_started_at).getTime();
-      if (processingTime < 300000) {
+      if (processingTime < 1200000) { // 20 minutes
         return res.status(409).json({
           error: 'Request currently being processed',
           processingTimeSeconds: Math.round(processingTime / 1000)
@@ -263,11 +268,13 @@ async function callClaudeAPI(payload) {
       hasSystem: !!claudeRequest.system,
       hasTools: !!claudeRequest.tools,
       hasThinking: !!claudeRequest.thinking,
+      thinkingBudget: claudeRequest.thinking?.budget_tokens,
       maxTokens: claudeRequest.max_tokens,
       temperature: claudeRequest.temperature
     };
 
     console.log(`📤 Sending request to Claude API:`, JSON.stringify(requestSummary, null, 2));
+    console.log(`⏱️ Timeout layers: undici=12min, abort=11min, vercel=13.3min`);
 
     // Log full request in development (but truncate for production to avoid log spam)
     if (process.env.NODE_ENV === 'development') {
@@ -289,7 +296,7 @@ async function callClaudeAPI(payload) {
 
         // Create AbortController for timeout
         const controller = new AbortController();
-        const timeoutMs = 720000; // 12 minutes
+        const timeoutMs = 660000; // 11 minutes
         const timeoutId = setTimeout(() => {
           controller.abort();
           console.error(`⏰ Request timeout after ${timeoutMs}ms`);
