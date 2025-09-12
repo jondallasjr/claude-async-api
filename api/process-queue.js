@@ -176,12 +176,13 @@ function processResponseMinimal(claudeResponse, requestPayload) {
       const jsonMatch = textContent.text.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         try {
-          // Validate it's actually JSON
+          // Validate it's actually JSON and clean it
           JSON.parse(jsonMatch[0]);
           // Replace the mixed text with clean JSON
           textContent.text = jsonMatch[0];
+          console.log('✅ Extracted clean JSON from mixed content');
         } catch (e) {
-          console.warn('JSON extraction failed, keeping original text');
+          console.warn('⚠️ JSON extraction failed, keeping original text:', e.message);
         }
       }
     }
