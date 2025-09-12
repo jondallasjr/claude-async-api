@@ -1,10 +1,9 @@
 // =================================================================
-// DEV NOTES for api/process-queue.js (Updated 2025-06-04)
+// DEV NOTES for api/process-queue.js (Updated 2025-09-09)
 // =================================================================
 /*
-ARCHITECTURE UPDATE - PACK-ONLY REQUEST BUILDING:
 
-NEW ROLE SEPARATION:
+ROLE SEPARATION:
 - PACK: Builds complete Claude API request (claudeRequest field)
 - VERCEL: Forwards claudeRequest as-is to Claude API, adds cost calculation
 
@@ -31,6 +30,79 @@ CRITICAL LESSON: Coda Pack authentication truncates user API keys from 108→24 
 STATUS HANDLING:
 - Handles already completed/failed requests gracefully
 - Detects stuck processing requests (>5 min) and resets them
+
+TIMEOUT RESOLUTION (2025-09-09):
+=====================================
+
+PROBLEM SOLVED: Complex requests with thinking failing after exactly 5 minutes
+- Root cause: Node.js/undici default HTTP timeout of 300 seconds (5 minutes)
+- Symptom: "fetch failed" errors for hasThinking requests at 300s mark
+- Investigation: Multiple timeout layers identified and systematically eliminated
+
+SOLUTION IMPLEMENTED: undici Agent with extended timeouts
+- Added undici@6.0.0 dependency to package.json
+- Global dispatcher configuration extends all fetch timeouts to 15 minutes
+- Covers: connection timeout, headers timeout, body timeout
+
+CODE CHANGES:
+import { setGlobalDispatcher, Agent } from 'undici';
+
+setGlobalDispatcher(new Agent({
+  connect: { timeout: 900_000 }, // 15 minutes (900 seconds)
+  headersTimeout: 900_000,       // 15 minutes for headers
+  bodyTimeout: 900_000           // 15 minutes for response body
+}));
+
+INVESTIGATION TIMELINE:
+1. Eliminated pg_net trigger conflicts (proved not the issue)
+2. Extended pg_net timeout to 15 minutes (necessary but insufficient)
+3. Added comprehensive logging (revealed exact 5-minute timing)
+4. Identified infrastructure-level HTTP timeout as root cause
+5. Implemented undici Agent solution (resolved issue)
+
+CURRENT STATUS:
+- ✅ Simple requests: <5 minutes, work perfectly (unchanged)
+- ✅ Complex requests: 5-15 minutes, now complete successfully
+- ✅ pg_net trigger: 15-minute timeout, reliable auto-processing
+- ✅ Webhook delivery: Reliable completion notifications
+- ✅ System stability: No regressions, enhanced error handling
+
+TIMEOUT HIERARCHY (all components now aligned):
+1. undici Agent: 15 minutes (extended via solution)
+2. Vercel function: 13+ minutes (maxDuration: 800)
+3. Claude API application: 12 minutes (AbortController in retry logic)
+4. pg_net trigger: 15 minutes (extended in Step 4 of investigation)
+
+ROLLBACK PLAN:
+- Comment out undici import and setGlobalDispatcher lines
+- Remove undici from package.json dependencies
+- System reverts to 5-minute timeout behavior
+
+PERFORMANCE IMPACT:
+- Simple requests: No change in performance
+- Complex requests: Now complete instead of failing
+- System overhead: Minimal, only affects timeout limits
+- Error handling: Enhanced with timeout-specific diagnostics
+
+ALTERNATIVE SOLUTIONS CONSIDERED:
+- Streaming implementation: Rejected (too complex, high risk)
+- Request splitting: Rejected (architectural complexity)
+- AbortSignal.timeout(): Rejected (less comprehensive than undici)
+- Per-request agents: Rejected (global policy simpler)
+
+LESSONS LEARNED:
+- Infrastructure timeouts can override application timeouts
+- Systematic layer-by-layer investigation essential for complex issues
+- Conservative timeout values better than aggressive optimization
+- Global timeout policies simpler than per-request configuration
+- Always maintain rollback capability for timeout changes
+
+FILES MODIFIED IN TIMEOUT RESOLUTION:
+- process-queue.js: Added undici import and global dispatcher
+- package.json: Added undici@6.0.0 dependency
+- trigger_processing(): Extended pg_net timeout to 15 minutes + logging
+- send_completion_webhook(): Enhanced logging for monitoring
+- webhook_logs table: Tracks pg_net request lifecycle
 
 TODO: Investigate Pack authentication to restore user API key functionality
 */
@@ -483,98 +555,83 @@ async function checkClaudeAPIHealth() {
 
 function processClaudeResponseWithSizeControl(claudeResponse, requestPayload) {
   const { modelPricing, responseOptions } = requestPayload;
-
-  // ALWAYS remove signatures (they're just bloat)
+  const logs = [];
+  // 1) always drop signatures
   let finalResponse = removeSignaturesFromResponse(claudeResponse);
-  const processingLog = [];
-
-  // Calculate original size AFTER signature removal
   const originalSize = JSON.stringify(finalResponse).length;
-  processingLog.push(`Original response size: ${originalSize} characters`);
+  logs.push(`Original response size: ${originalSize} characters`);
 
-  // Only apply citation cleaning if web search was enabled
+  // 2) citation formatting only (no aggressive cleaning)
   if (responseOptions?.webSearch) {
-    processingLog.push('Web search detected, applying citation cleaning...');
-    console.log('Web search detected, applying citation cleaning...');
-
-    let cleanedResponse;
+    logs.push("Web search detected, formatting citations…");
     try {
-      cleanedResponse = deepCleanResponseWithCitations(claudeResponse);
-    } catch (cleaningError) {
-      console.error('Cleaning failed, using original response:', cleaningError);
-      processingLog.push(`Cleaning failed: ${cleaningError.message}, using original response`);
-    }
-
-    if (cleanedResponse) {
-      const responseSize = JSON.stringify(cleanedResponse).length;
-      processingLog.push(`Response size after cleaning: ${responseSize} characters`);
-
-      if (responseSize > 45000) {
-        processingLog.push('Response still too large, applying aggressive cleaning...');
-        try {
-          cleanedResponse = aggressiveCleanResponseWithCitations(claudeResponse);
-          const newSize = JSON.stringify(cleanedResponse).length;
-          processingLog.push(`Final size after aggressive cleaning: ${newSize} characters`);
-        } catch (aggressiveError) {
-          console.error('Aggressive cleaning failed:', aggressiveError);
-        }
-      }
-
-      finalResponse = cleanedResponse;
+      finalResponse = formatCitationsInPlace(finalResponse);
+    } catch (e) {
+      logs.push(`Citation formatting failed: ${e.message}`);
     }
   } else {
-    processingLog.push('No web search used, skipping response cleaning');
+    logs.push("No web search used, skipping citation formatting");
   }
 
-  // Add cost calculation (always included)
-  if (modelPricing && claudeResponse.usage) {
-    const { input_tokens, output_tokens } = claudeResponse.usage;
-    const inputCost = (input_tokens / 1000000) * modelPricing.input;
-    const outputCost = (output_tokens / 1000000) * modelPricing.output;
+  // 3) cap text fields to 45k (but never cap JSON-mode content[0].text)
+  try {
+    finalResponse = capResponseTextFields(finalResponse, {
+      jsonContent: !!responseOptions?.jsonContent,
+      limit: 45000,
+    });
+  } catch (e) {
+    logs.push(`Cap step failed: ${e.message}`);
+  }
 
+  // 4) cost calc
+  if (modelPricing && finalResponse.usage) {
+    const { input_tokens, output_tokens } = finalResponse.usage;
+    const inputCost = (input_tokens / 1_000_000) * modelPricing.input;
+    const outputCost = (output_tokens / 1_000_000) * modelPricing.output;
     finalResponse.cost = {
-      model: requestPayload.claudeRequest?.model || 'claude-sonnet-4-20250514',
+      model: requestPayload.claudeRequest?.model || "claude-sonnet-4-20250514",
       inputTokens: input_tokens,
       outputTokens: output_tokens,
-      inputCost: parseFloat(inputCost.toFixed(6)),
-      outputCost: parseFloat(outputCost.toFixed(6)),
-      totalCost: parseFloat((inputCost + outputCost).toFixed(6)),
-      currency: 'USD'
+      inputCost: +inputCost.toFixed(6),
+      outputCost: +outputCost.toFixed(6),
+      totalCost: +(inputCost + outputCost).toFixed(6),
+      currency: "USD",
     };
   }
 
-  // Add metadata
+  // 5) metadata
   finalResponse.requestId = requestPayload.requestId;
   finalResponse.completedAt = new Date().toISOString();
 
-  // NEW: Handle response format based on includeWrapper parameter
+  // 6) wrapper / simplified
   if (responseOptions?.includeWrapper) {
-    // Return full Claude response with metadata
     finalResponse._processingInfo = {
       webSearchEnabled: !!responseOptions?.webSearch,
-      cleaningApplied: !!responseOptions?.webSearch,
+      cleaningApplied: false,                 // we didn’t run deep/aggressive cleaners
       originalSizeChars: originalSize,
       finalSizeChars: JSON.stringify(finalResponse).length,
-      processingLog: processingLog,
+      processingLog: logs,
       jsonContentMode: !!responseOptions?.jsonContent,
-      includeWrapperMode: true
+      includeWrapperMode: true,
+      citationsFormatted: !!responseOptions?.webSearch,
+      textCapLimit: 45000,
     };
-
     return finalResponse;
   } else {
-    // Return simplified format with just content
     return {
-      content: finalResponse.content?.[0]?.text || '',
+      content: finalResponse.content?.[0]?.text || "",
       requestId: requestPayload.requestId,
       completedAt: new Date().toISOString(),
       ...(finalResponse.cost && { cost: finalResponse.cost }),
       _processingInfo: {
         webSearchEnabled: !!responseOptions?.webSearch,
-        cleaningApplied: !!responseOptions?.webSearch,
+        cleaningApplied: false,
         jsonContentMode: !!responseOptions?.jsonContent,
         includeWrapperMode: false,
-        processingLog: processingLog
-      }
+        citationsFormatted: !!responseOptions?.webSearch,
+        processingLog: logs,
+        textCapLimit: 45000,
+      },
     };
   }
 }
@@ -1047,4 +1104,143 @@ function rebuildContentWithCitationsAggressive(contentArray) {
       text: allTextContent
     }
   ];
+}
+
+function capStr(s, limit = 45000) {
+  return (typeof s === "string" && s.length > limit) ? s.slice(0, limit) : s;
+}
+
+// Cap ONLY text-bearing fields inside Claude’s wrapper.
+// - content[].text
+// - content[].thinking
+// - web_search_result_location.cited_text
+// - (leave everything else alone)
+// - If jsonContent=true, DO NOT cap content[0].text (it may be JSON-in-a-string)
+function capResponseTextFields(resp, { jsonContent = false, limit = 45000 } = {}) {
+  if (!resp || typeof resp !== "object") return resp;
+
+  const clone = Array.isArray(resp) ? [] : {};
+  for (const [k, v] of Object.entries(resp)) {
+    if (k === "content" && Array.isArray(v)) {
+      clone[k] = v.map((item, idx) => {
+        if (!item || typeof item !== "object") return item;
+        const it = { ...item };
+
+        if (it.type === "text" && typeof it.text === "string") {
+          // Preserve JSON-mode content from truncation for validity
+          if (!(jsonContent && idx === 0)) {
+            it.text = capStr(it.text, limit);
+          }
+        }
+
+        if (it.type === "thinking" && typeof it.thinking === "string") {
+          it.thinking = capStr(it.thinking, limit);
+        }
+
+        // Nested objects (e.g., tool payloads) pass through unchanged
+        return it;
+      });
+    } else if (resp.type === "web_search_result_location" && k === "cited_text" && typeof v === "string") {
+      clone[k] = capStr(v, limit);
+    } else if (typeof v === "object" && v !== null) {
+      clone[k] = capResponseTextFields(v, { jsonContent, limit });
+    } else {
+      clone[k] = v;
+    }
+  }
+  return clone;
+}
+
+// Build footnote-style citations while keeping wrapper/structure.
+// - Adds [^n] markers into text where possible (from embedded <cite> or item.citations)
+// - Appends a final text item with "**Sources:**" list
+// - Leaves non-text items intact
+function formatCitationsInPlace(resp) {
+  if (!resp?.content || !Array.isArray(resp.content)) return resp;
+  const out = { ...resp, content: resp.content.map(x => ({ ...x })) };
+
+  const regEsc = /<cite index=\\"([^\\]+)\\">([^<]+)<\/cite>/g;   // escaped cite tags in JSON strings
+  const regNorm = /<cite index="([^"]+)">([^<]+)<\/cite>/g;       // normal cite tags
+
+  const citationMap = new Map(); // key: url or doc_index → { n, title, url, text, kind }
+  let n = 1;
+
+  // First pass: collect sources
+  for (const item of out.content) {
+    if (item.type !== "text" || typeof item.text !== "string") continue;
+
+    // Inline <cite> tags (document-type)
+    for (const [re, kind] of [[regEsc, "doc"], [regNorm, "doc"]]) {
+      let m;
+      while ((m = re.exec(item.text)) !== null) {
+        const [, idx, cited] = m;
+        const key = `doc:${idx}`;
+        if (!citationMap.has(key)) {
+          citationMap.set(key, { n: n++, title: `Source ${idx}`, url: null, text: cited, kind: "doc" });
+        }
+      }
+    }
+
+    // Attached citation objects (web-search type)
+    if (Array.isArray(item.citations)) {
+      for (const c of item.citations) {
+        if (!c?.url) continue;
+        if (!citationMap.has(c.url)) {
+          citationMap.set(c.url, {
+            n: n++,
+            title: c.title || "Source",
+            url: c.url,
+            text: c.cited_text || "",
+            kind: "web"
+          });
+        }
+      }
+    }
+  }
+
+  if (citationMap.size === 0) return out; // nothing to format
+
+  // Second pass: insert [^n] markers into text
+  out.content = out.content.map(item => {
+    if (item.type !== "text" || typeof item.text !== "string") return item;
+    let t = item.text;
+
+    // Replace <cite>…</cite> with cited_text + [^n]
+    for (const [re] of [[regEsc], [regNorm]]) {
+      t = t.replace(re, (_full, idx, cited) => {
+        const key = `doc:${idx}`;
+        const c = citationMap.get(key);
+        return c ? `${cited}[^${c.n}]` : cited;
+      });
+    }
+
+    // If the item has citations array with URLs, add trailing markers
+    if (Array.isArray(item.citations) && item.citations.length) {
+      const markers = item.citations
+        .map(c => citationMap.get(c.url))
+        .filter(Boolean)
+        .map(c => `[^${c.n}]`)
+        .join("");
+      t += markers;
+    }
+
+    return { ...item, text: t };
+  });
+
+  // Build compact footnotes block
+  const sourcesList = [...citationMap.values()]
+    .sort((a, b) => a.n - b.n)
+    .map(c => c.kind === "web"
+      ? `[^${c.n}]: [${c.title}](${c.url})`
+      : `[^${c.n}]: ${c.text}`)
+    .join("\n");
+
+  if (sourcesList) {
+    out.content.push({
+      type: "text",
+      text: `\n\n---\n\n**Sources:**\n\n${sourcesList}`
+    });
+  }
+
+  return out;
 }
