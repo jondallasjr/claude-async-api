@@ -108,7 +108,7 @@ TODO: Investigate Pack authentication to restore user API key functionality
 */
 
 import { createClient } from '@supabase/supabase-js';
- 
+
 import { setGlobalDispatcher, Agent } from 'undici';
 
 // This extends the timeout globally for all fetch requests in this function
@@ -540,7 +540,8 @@ function processClaudeResponseWithSizeControl(claudeResponse, requestPayload) {
 
   // 1) drop signatures (lightweight)
   let finalResponse = removeSignaturesFromResponse(claudeResponse);
-  logs.push(`Original response size: ${JSON.stringify(finalResponse).length} characters`);
+  const originalSize = JSON.stringify(finalResponse).length;
+  logs.push(`Original response size: ${originalSize} characters`);
 
   // 2) format citations (only when web search used)
   if (responseOptions?.webSearch) {
