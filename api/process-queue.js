@@ -534,46 +534,24 @@ async function callClaudeAPI(payload) {
 
 // =================== HELPER FUNCTIONS ===================
 
-// Optional: Add a health check function
-async function checkClaudeAPIHealth() {
-  try {
-    const testPayload = {
-      claudeRequest: {
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 10,
-        messages: [{ role: "user", content: "Hi" }]
-      },
-      requestId: "health_check"
-    };
-
-    const result = await callClaudeAPI(testPayload);
-    return { healthy: true, response: result.content?.[0]?.text };
-  } catch (error) {
-    return { healthy: false, error: error.message };
-  }
-}
-
 function processClaudeResponseWithSizeControl(claudeResponse, requestPayload) {
   const { modelPricing, responseOptions } = requestPayload;
   const logs = [];
-  // 1) always drop signatures
-  let finalResponse = removeSignaturesFromResponse(claudeResponse);
-  const originalSize = JSON.stringify(finalResponse).length;
-  logs.push(`Original response size: ${originalSize} characters`);
 
-  // 2) citation formatting only (no aggressive cleaning)
+  // 1) drop signatures (lightweight)
+  let finalResponse = removeSignaturesFromResponse(claudeResponse);
+  logs.push(`Original response size: ${JSON.stringify(finalResponse).length} characters`);
+
+  // 2) format citations (only when web search used)
   if (responseOptions?.webSearch) {
     logs.push("Web search detected, formatting citations…");
-    try {
-      finalResponse = formatCitationsInPlace(finalResponse);
-    } catch (e) {
-      logs.push(`Citation formatting failed: ${e.message}`);
-    }
+    try { finalResponse = formatCitationsInPlace(finalResponse); }
+    catch (e) { logs.push(`Citation formatting failed: ${e.message}`); }
   } else {
     logs.push("No web search used, skipping citation formatting");
   }
 
-  // 3) cap text fields to 45k (but never cap JSON-mode content[0].text)
+  // 3) cap every text string at 45k (skip content[0].text if jsonContent=true)
   try {
     finalResponse = capResponseTextFields(finalResponse, {
       jsonContent: !!responseOptions?.jsonContent,
@@ -583,7 +561,7 @@ function processClaudeResponseWithSizeControl(claudeResponse, requestPayload) {
     logs.push(`Cap step failed: ${e.message}`);
   }
 
-  // 4) cost calc
+  // 4) cost (unchanged)
   if (modelPricing && finalResponse.usage) {
     const { input_tokens, output_tokens } = finalResponse.usage;
     const inputCost = (input_tokens / 1_000_000) * modelPricing.input;
@@ -599,15 +577,15 @@ function processClaudeResponseWithSizeControl(claudeResponse, requestPayload) {
     };
   }
 
-  // 5) metadata
+  // 5) metadata (unchanged)
   finalResponse.requestId = requestPayload.requestId;
   finalResponse.completedAt = new Date().toISOString();
 
-  // 6) wrapper / simplified
+  // 6) return wrapper or simplified (your existing logic)
   if (responseOptions?.includeWrapper) {
     finalResponse._processingInfo = {
       webSearchEnabled: !!responseOptions?.webSearch,
-      cleaningApplied: false,                 // we didn’t run deep/aggressive cleaners
+      cleaningApplied: false,
       originalSizeChars: originalSize,
       finalSizeChars: JSON.stringify(finalResponse).length,
       processingLog: logs,
@@ -636,611 +614,114 @@ function processClaudeResponseWithSizeControl(claudeResponse, requestPayload) {
   }
 }
 
-// Consolidate content array into object by type
-function consolidateContentByType(contentArray) {
-  const consolidated = {};
-
-  for (const item of contentArray) {
-    if (!item.type) continue;
-
-    const type = item.type;
-
-    // Initialize the type if it doesn't exist
-    if (!consolidated[type]) {
-      consolidated[type] = '';
-    }
-
-    // Handle different content types
-    switch (type) {
-      case 'text':
-        // Join text content with newlines
-        if (item.text) {
-          consolidated[type] += (consolidated[type] ? '\n\n' : '') + item.text;
-        }
-        break;
-
-      case 'thinking':
-        // Join thinking content with newlines
-        if (item.thinking) {
-          consolidated[type] += (consolidated[type] ? '\n\n' : '') + item.thinking;
-        }
-        break;
-
-      case 'web_search_tool_result':
-        // For web search results, preserve the structure but consolidate
-        if (!consolidated[type]) {
-          consolidated[type] = {
-            type: 'web_search_tool_result',
-            content: []
-          };
-        }
-        if (item.content && Array.isArray(item.content)) {
-          consolidated[type].content.push(...item.content);
-        }
-        break;
-
-      default:
-        // For other types, try to extract meaningful content
-        if (item.text) {
-          consolidated[type] += (consolidated[type] ? '\n\n' : '') + item.text;
-        } else if (typeof item === 'object') {
-          // For complex objects, store as JSON string (you might want to handle this differently)
-          consolidated[type] += (consolidated[type] ? '\n\n' : '') + JSON.stringify(item, null, 2);
-        }
-        break;
-    }
-  }
-
-  // Clean up empty entries
-  Object.keys(consolidated).forEach(key => {
-    if (consolidated[key] === '' || (typeof consolidated[key] === 'object' && !consolidated[key].content?.length)) {
-      delete consolidated[key];
-    }
-  });
-
-  return consolidated;
-}
-
-function deepCleanResponseWithCitations(obj) {
-  if (obj === null || typeof obj !== 'object') {
-    return obj;
-  }
-
-  if (Array.isArray(obj)) {
-    return obj.map(item => deepCleanResponseWithCitations(item));
-  }
-
-  const cleaned = {};
-
-  for (const [key, value] of Object.entries(obj)) {
-    // Remove encrypted fields that consume massive space
-    if (key === 'encrypted_content' || key === 'encrypted_index') {
-      continue;
-    }
-
-    // Special handling for content arrays (rebuild citations)
-    if (key === 'content' && Array.isArray(value)) {
-      cleaned[key] = rebuildContentWithCitations(value);
-      continue;
-    }
-
-    // For web_search_result objects, keep only essential metadata
-    if (obj.type === 'web_search_result') {
-      // Keep only: type, title, url, page_age (remove encrypted_content)
-      if (['type', 'title', 'url', 'page_age'].includes(key)) {
-        cleaned[key] = value;
-      }
-      continue;
-    }
-
-    // For citation objects, preserve all fields except encrypted_index
-    if (obj.type === 'web_search_result_location') {
-      // Keep: type, cited_text, url, title (remove encrypted_index)
-      if (['type', 'cited_text', 'url', 'title'].includes(key)) {
-        cleaned[key] = value;
-      }
-      continue;
-    }
-
-    // For all other objects, recursively clean and preserve structure
-    cleaned[key] = deepCleanResponseWithCitations(value);
-  }
-
-  return cleaned;
-}
-
-function rebuildContentWithCitations(contentArray) {
-  const citationRegistry = new Map();
-  let citationCounter = 1;
-  const processedContent = [];
-
-  // First pass: collect all citations and assign numbers
-  for (const item of contentArray) {
-    // Handle web search citations (separate citation objects)
-    if (item.type === 'text' && item.citations && Array.isArray(item.citations)) {
-      for (const citation of item.citations) {
-        if (citation.url && !citationRegistry.has(citation.url)) {
-          citationRegistry.set(citation.url, {
-            number: citationCounter++,
-            title: citation.title || 'Unknown Source',
-            url: citation.url,
-            cited_text: citation.cited_text || '',
-            type: 'web_search'
-          });
-        }
-      }
-    }
-
-    // Handle embedded cite tags in text
-    if (item.type === 'text' && item.text) {
-      // Handle escaped cite tags: <cite index=\"...\">content</cite>
-      const escapedCiteRegex = /<cite index=\\"([^\\]+)\\">([^<]+)<\/cite>/g;
-      // Handle normal cite tags: <cite index="...">content</cite>  
-      const normalCiteRegex = /<cite index="([^"]+)">([^<]+)<\/cite>/g;
-
-      let match;
-      // Check for escaped citations first
-      while ((match = escapedCiteRegex.exec(item.text)) !== null) {
-        const [fullMatch, indexInfo, citedText] = match;
-        const citationKey = `doc_${indexInfo}`;
-
-        if (!citationRegistry.has(citationKey)) {
-          citationRegistry.set(citationKey, {
-            number: citationCounter++,
-            title: `Source ${indexInfo}`,
-            url: null,
-            cited_text: citedText,
-            index: indexInfo,
-            type: 'document'
-          });
-        }
-      }
-
-      // Then check for normal citations
-      while ((match = normalCiteRegex.exec(item.text)) !== null) {
-        const [fullMatch, indexInfo, citedText] = match;
-        const citationKey = `doc_${indexInfo}`;
-
-        if (!citationRegistry.has(citationKey)) {
-          citationRegistry.set(citationKey, {
-            number: citationCounter++,
-            title: `Source ${indexInfo}`,
-            url: null,
-            cited_text: citedText,
-            index: indexInfo,
-            type: 'document'
-          });
-        }
-      }
-    }
-  }
-
-  // Second pass: rebuild content with citation markers
-  for (const item of contentArray) {
-    if (item.type === 'text') {
-      let processedText = item.text || '';
-
-      // Handle embedded cite tags - replace with footnote markers
-      if (processedText.includes('<cite')) {
-        // Handle escaped cite tags first: <cite index=\"...\">
-        const escapedCiteRegex = /<cite index=\\"([^\\]+)\\">([^<]+)<\/cite>/g;
-        processedText = processedText.replace(escapedCiteRegex, (match, indexInfo, citedText) => {
-          const citationKey = `doc_${indexInfo}`;
-          const citation = citationRegistry.get(citationKey);
-          return citation ? `${citedText}[^${citation.number}]` : citedText;
-        });
-
-        // Then handle normal cite tags: <cite index="...">
-        const normalCiteRegex = /<cite index="([^"]+)">([^<]+)<\/cite>/g;
-        processedText = processedText.replace(normalCiteRegex, (match, indexInfo, citedText) => {
-          const citationKey = `doc_${indexInfo}`;
-          const citation = citationRegistry.get(citationKey);
-          return citation ? `${citedText}[^${citation.number}]` : citedText;
-        });
-      }
-
-      // Handle web search citations (separate citation objects)
-      if (item.citations && Array.isArray(item.citations) && item.citations.length > 0) {
-        const citationMarkers = item.citations
-          .filter(c => c.url && citationRegistry.has(c.url))
-          .map(c => `[^${citationRegistry.get(c.url).number}]`)
-          .join('');
-
-        processedText += citationMarkers;
-      }
-
-      processedContent.push({
-        type: 'text',
-        text: processedText
-      });
-    }
-    // Skip all other content types - we only need the final consolidated text
-  }
-
-  // Add footnotes section if we have citations
-  if (citationRegistry.size > 0) {
-    const webSearchCitations = Array.from(citationRegistry.values()).filter(c => c.type === 'web_search');
-    const documentCitations = Array.from(citationRegistry.values()).filter(c => c.type === 'document');
-
-    let footnotesText = '\n\n---\n\n**Sources:**\n\n';
-
-    // Add web search citations with URLs
-    webSearchCitations
-      .sort((a, b) => a.number - b.number)
-      .forEach(citation => {
-        footnotesText += `[^${citation.number}]: [${citation.title}](${citation.url})\n`;
-      });
-
-    // Add document citations without URLs
-    documentCitations
-      .sort((a, b) => a.number - b.number)
-      .forEach(citation => {
-        footnotesText += `[^${citation.number}]: ${citation.cited_text} (Index: ${citation.index})\n`;
-      });
-
-    processedContent.push({
-      type: 'text',
-      text: footnotesText
-    });
-  }
-
-  // CONSOLIDATE ALL TEXT OBJECTS INTO ONE MARKDOWN DOCUMENT
-  const allTextContent = processedContent
-    .filter(item => item.type === 'text')
-    .map(item => item.text)
-    .join('');
-
-  // Keep non-text content (like web search results) but simplified
-  const nonTextContent = processedContent.filter(item => item.type !== 'text');
-
-  // Return consolidated structure
-  return [
-    {
-      type: 'text',
-      text: allTextContent
-    },
-    ...nonTextContent
-  ];
-}
-
-function aggressiveCleanResponseWithCitations(obj) {
-  if (obj === null || typeof obj !== 'object') {
-    return obj;
-  }
-
-  if (Array.isArray(obj)) {
-    return obj.map(item => aggressiveCleanResponseWithCitations(item));
-  }
-
-  const cleaned = {};
-
-  for (const [key, value] of Object.entries(obj)) {
-    // Remove all encrypted fields
-    if (key === 'encrypted_content' || key === 'encrypted_index') {
-      continue;
-    }
-
-    // Special handling for content arrays (rebuild citations with limits)
-    if (key === 'content' && Array.isArray(value)) {
-      cleaned[key] = rebuildContentWithCitationsAggressive(value);
-      continue;
-    }
-
-    // For web_search_tool_result content, keep only essential results
-    if (key === 'content' && obj.type === 'web_search_tool_result') {
-      // Limit to first 5 search results to control size
-      if (Array.isArray(value)) {
-        cleaned[key] = value.slice(0, 5).map(item => aggressiveCleanResponseWithCitations(item));
-      } else {
-        cleaned[key] = aggressiveCleanResponseWithCitations(value);
-      }
-      continue;
-    }
-
-    // For web_search_result, keep minimal data
-    if (obj.type === 'web_search_result') {
-      if (['type', 'title', 'url'].includes(key)) {
-        cleaned[key] = value;
-      }
-      continue;
-    }
-
-    // For citations, keep essential data only
-    if (obj.type === 'web_search_result_location') {
-      if (['type', 'url', 'title'].includes(key)) {  // Remove cited_text to save space
-        cleaned[key] = value;
-      }
-      continue;
-    }
-
-    // Recursively clean other objects
-    cleaned[key] = aggressiveCleanResponseWithCitations(value);
-  }
-
-  return cleaned;
-}
-
-function rebuildContentWithCitationsAggressive(contentArray) {
-  const citationRegistry = new Map();
-  let citationCounter = 1;
-  const processedContent = [];
-
-  // First pass: collect citations (limit to 20 unique sources)
-  for (const item of contentArray) {
-    // Handle web search citations
-    if (item.type === 'text' && item.citations && Array.isArray(item.citations)) {
-      for (const citation of item.citations) {
-        if (citation.url && !citationRegistry.has(citation.url) && citationRegistry.size < 20) {
-          citationRegistry.set(citation.url, {
-            number: citationCounter++,
-            title: (citation.title || 'Source').substring(0, 100), // Truncate titles
-            url: citation.url,
-            type: 'web_search'
-          });
-        }
-      }
-    }
-
-    // Handle embedded cite tags
-    if (item.type === 'text' && item.text && citationRegistry.size < 20) {
-      // Handle both escaped and unescaped cite tags
-      const escapedCiteRegex = /<cite index=\\"([^\\]+)\\">([^<]+)<\/cite>/g;
-      const normalCiteRegex = /<cite index="([^"]+)">([^<]+)<\/cite>/g;
-
-      let match;
-      // Check escaped citations first
-      while ((match = escapedCiteRegex.exec(item.text)) !== null && citationRegistry.size < 20) {
-        const [fullMatch, indexInfo, citedText] = match;
-        const citationKey = `doc_${indexInfo}`;
-
-        if (!citationRegistry.has(citationKey)) {
-          citationRegistry.set(citationKey, {
-            number: citationCounter++,
-            title: `Source ${indexInfo}`,
-            url: null,
-            cited_text: citedText.substring(0, 200), // Truncate cited text
-            index: indexInfo,
-            type: 'document'
-          });
-        }
-      }
-
-      // Then check normal citations
-      while ((match = normalCiteRegex.exec(item.text)) !== null && citationRegistry.size < 20) {
-        const [fullMatch, indexInfo, citedText] = match;
-        const citationKey = `doc_${indexInfo}`;
-
-        if (!citationRegistry.has(citationKey)) {
-          citationRegistry.set(citationKey, {
-            number: citationCounter++,
-            title: `Source ${indexInfo}`,
-            url: null,
-            cited_text: citedText.substring(0, 200), // Truncate cited text
-            index: indexInfo,
-            type: 'document'
-          });
-        }
-      }
-    }
-  }
-
-  // Second pass: rebuild content with citation markers
-  for (const item of contentArray) {
-    if (item.type === 'text') {
-      let processedText = item.text || '';
-
-      // Handle embedded cite tags
-      if (processedText.includes('<cite')) {
-        // Handle escaped cite tags first
-        const escapedCiteRegex = /<cite index=\\"([^\\]+)\\">([^<]+)<\/cite>/g;
-        processedText = processedText.replace(escapedCiteRegex, (match, indexInfo, citedText) => {
-          const citationKey = `doc_${indexInfo}`;
-          const citation = citationRegistry.get(citationKey);
-          return citation ? `${citedText}[^${citation.number}]` : citedText;
-        });
-
-        // Then handle normal cite tags
-        const normalCiteRegex = /<cite index="([^"]+)">([^<]+)<\/cite>/g;
-        processedText = processedText.replace(normalCiteRegex, (match, indexInfo, citedText) => {
-          const citationKey = `doc_${indexInfo}`;
-          const citation = citationRegistry.get(citationKey);
-          return citation ? `${citedText}[^${citation.number}]` : citedText;
-        });
-      }
-
-      // Handle web search citations
-      if (item.citations && Array.isArray(item.citations) && item.citations.length > 0) {
-        const citationMarkers = item.citations
-          .filter(c => c.url && citationRegistry.has(c.url))
-          .map(c => `[^${citationRegistry.get(c.url).number}]`)
-          .join('');
-
-        processedText += citationMarkers;
-      }
-
-      processedContent.push({
-        type: 'text',
-        text: processedText
-      });
-    }
-    // Skip all other content types - we only need the final consolidated text
-  }
-
-  // Add compact footnotes section
-  if (citationRegistry.size > 0) {
-    const webSearchCitations = Array.from(citationRegistry.values()).filter(c => c.type === 'web_search');
-    const documentCitations = Array.from(citationRegistry.values()).filter(c => c.type === 'document');
-
-    let footnotesText = '\n\n**Sources:** ';
-
-    const allCitations = [...webSearchCitations, ...documentCitations]
-      .sort((a, b) => a.number - b.number);
-
-    footnotesText += allCitations.map(citation => {
-      if (citation.type === 'web_search') {
-        return `[^${citation.number}]: [${citation.title}](${citation.url})`;
-      } else {
-        return `[^${citation.number}]: ${citation.cited_text}`;
-      }
-    }).join(' • ');
-
-    processedContent.push({
-      type: 'text',
-      text: footnotesText
-    });
-  }
-
-  // CONSOLIDATE ALL TEXT OBJECTS INTO ONE MARKDOWN DOCUMENT
-  const allTextContent = processedContent
-    .filter(item => item.type === 'text')
-    .map(item => item.text)
-    .join('');
-
-  // Return just the consolidated markdown text for Coda
-  // All citation information is now embedded in the text
-  return [
-    {
-      type: 'text',
-      text: allTextContent
-    }
-  ];
-}
-
 function capStr(s, limit = 45000) {
   return (typeof s === "string" && s.length > limit) ? s.slice(0, limit) : s;
 }
 
-// Cap ONLY text-bearing fields inside Claude’s wrapper.
-// - content[].text
-// - content[].thinking
-// - web_search_result_location.cited_text
-// - (leave everything else alone)
+// Cap ONLY text-bearing fields; keep structure intact.
+// - Caps: content[].text, content[].thinking, web_search_result_location.cited_text
+// - Recurses elsewhere but only caps strings
 // - If jsonContent=true, DO NOT cap content[0].text (it may be JSON-in-a-string)
 function capResponseTextFields(resp, { jsonContent = false, limit = 45000 } = {}) {
-  if (!resp || typeof resp !== "object") return resp;
+  if (resp == null || typeof resp !== "object") return resp;
 
-  const clone = Array.isArray(resp) ? [] : {};
+  if (Array.isArray(resp)) {
+    return resp.map((v, i) => capResponseTextFields(v, { jsonContent, limit }));
+  }
+
+  const out = {};
   for (const [k, v] of Object.entries(resp)) {
     if (k === "content" && Array.isArray(v)) {
-      clone[k] = v.map((item, idx) => {
+      out[k] = v.map((item, idx) => {
         if (!item || typeof item !== "object") return item;
         const it = { ...item };
 
         if (it.type === "text" && typeof it.text === "string") {
-          // Preserve JSON-mode content from truncation for validity
-          if (!(jsonContent && idx === 0)) {
-            it.text = capStr(it.text, limit);
-          }
+          if (!(jsonContent && idx === 0)) it.text = capStr(it.text, limit);
         }
-
         if (it.type === "thinking" && typeof it.thinking === "string") {
           it.thinking = capStr(it.thinking, limit);
         }
-
-        // Nested objects (e.g., tool payloads) pass through unchanged
+        // citations array stays; its inner strings are short
         return it;
       });
-    } else if (resp.type === "web_search_result_location" && k === "cited_text" && typeof v === "string") {
-      clone[k] = capStr(v, limit);
-    } else if (typeof v === "object" && v !== null) {
-      clone[k] = capResponseTextFields(v, { jsonContent, limit });
-    } else {
-      clone[k] = v;
+      continue;
     }
+
+    if (resp.type === "web_search_result_location" && k === "cited_text" && typeof v === "string") {
+      out[k] = capStr(v, limit);
+      continue;
+    }
+
+    out[k] = capResponseTextFields(v, { jsonContent, limit });
   }
-  return clone;
+  return out;
 }
 
-// Build footnote-style citations while keeping wrapper/structure.
-// - Adds [^n] markers into text where possible (from embedded <cite> or item.citations)
-// - Appends a final text item with "**Sources:**" list
-// - Leaves non-text items intact
+// Format citations: insert [^n] markers and append a Sources block.
+// Preserves wrapper; modifies only content[].text.
 function formatCitationsInPlace(resp) {
   if (!resp?.content || !Array.isArray(resp.content)) return resp;
   const out = { ...resp, content: resp.content.map(x => ({ ...x })) };
 
-  const regEsc = /<cite index=\\"([^\\]+)\\">([^<]+)<\/cite>/g;   // escaped cite tags in JSON strings
-  const regNorm = /<cite index="([^"]+)">([^<]+)<\/cite>/g;       // normal cite tags
+  const regEsc = /<cite index=\\"([^\\]+)\\">([^<]+)<\/cite>/g;
+  const regNorm = /<cite index="([^"]+)">([^<]+)<\/cite>/g;
 
-  const citationMap = new Map(); // key: url or doc_index → { n, title, url, text, kind }
+  const map = new Map(); // key → { n, title, url, text, kind }
   let n = 1;
 
-  // First pass: collect sources
+  // Collect
   for (const item of out.content) {
     if (item.type !== "text" || typeof item.text !== "string") continue;
 
-    // Inline <cite> tags (document-type)
-    for (const [re, kind] of [[regEsc, "doc"], [regNorm, "doc"]]) {
-      let m;
-      while ((m = re.exec(item.text)) !== null) {
-        const [, idx, cited] = m;
-        const key = `doc:${idx}`;
-        if (!citationMap.has(key)) {
-          citationMap.set(key, { n: n++, title: `Source ${idx}`, url: null, text: cited, kind: "doc" });
-        }
-      }
+    let m;
+    while ((m = regEsc.exec(item.text)) !== null) {
+      const [, idx, cited] = m;
+      const key = `doc:${idx}`;
+      if (!map.has(key)) map.set(key, { n: n++, title: `Source ${idx}`, url: null, text: cited, kind: "doc" });
+    }
+    while ((m = regNorm.exec(item.text)) !== null) {
+      const [, idx, cited] = m;
+      const key = `doc:${idx}`;
+      if (!map.has(key)) map.set(key, { n: n++, title: `Source ${idx}`, url: null, text: cited, kind: "doc" });
     }
 
-    // Attached citation objects (web-search type)
     if (Array.isArray(item.citations)) {
       for (const c of item.citations) {
         if (!c?.url) continue;
-        if (!citationMap.has(c.url)) {
-          citationMap.set(c.url, {
-            n: n++,
-            title: c.title || "Source",
-            url: c.url,
-            text: c.cited_text || "",
-            kind: "web"
-          });
-        }
+        if (!map.has(c.url)) map.set(c.url, { n: n++, title: c.title || "Source", url: c.url, text: c.cited_text || "", kind: "web" });
       }
     }
   }
+  if (map.size === 0) return out;
 
-  if (citationMap.size === 0) return out; // nothing to format
-
-  // Second pass: insert [^n] markers into text
+  // Insert markers
   out.content = out.content.map(item => {
     if (item.type !== "text" || typeof item.text !== "string") return item;
     let t = item.text;
 
-    // Replace <cite>…</cite> with cited_text + [^n]
-    for (const [re] of [[regEsc], [regNorm]]) {
-      t = t.replace(re, (_full, idx, cited) => {
-        const key = `doc:${idx}`;
-        const c = citationMap.get(key);
-        return c ? `${cited}[^${c.n}]` : cited;
-      });
-    }
+    t = t.replace(regEsc, (_full, idx, cited) => {
+      const c = map.get(`doc:${idx}`); return c ? `${cited}[^${c.n}]` : cited;
+    });
+    t = t.replace(regNorm, (_full, idx, cited) => {
+      const c = map.get(`doc:${idx}`); return c ? `${cited}[^${c.n}]` : cited;
+    });
 
-    // If the item has citations array with URLs, add trailing markers
     if (Array.isArray(item.citations) && item.citations.length) {
-      const markers = item.citations
-        .map(c => citationMap.get(c.url))
-        .filter(Boolean)
-        .map(c => `[^${c.n}]`)
-        .join("");
+      const markers = item.citations.map(c => map.get(c.url)).filter(Boolean).map(c => `[^${c.n}]`).join("");
       t += markers;
     }
-
     return { ...item, text: t };
   });
 
-  // Build compact footnotes block
-  const sourcesList = [...citationMap.values()]
+  // Append Sources block
+  const sources = [...map.values()]
     .sort((a, b) => a.n - b.n)
-    .map(c => c.kind === "web"
-      ? `[^${c.n}]: [${c.title}](${c.url})`
-      : `[^${c.n}]: ${c.text}`)
+    .map(c => (c.kind === "web" ? `[^${c.n}]: [${c.title}](${c.url})` : `[^${c.n}]: ${c.text}`))
     .join("\n");
 
-  if (sourcesList) {
-    out.content.push({
-      type: "text",
-      text: `\n\n---\n\n**Sources:**\n\n${sourcesList}`
-    });
+  if (sources) {
+    out.content.push({ type: "text", text: `\n\n---\n\n**Sources:**\n\n${sources}` });
   }
-
   return out;
 }
