@@ -233,13 +233,13 @@ function removeSpecificSensitiveFields(obj) {
 }
 
 // Limit individual text fields to 45k characters
-function limitTextFieldSizes(obj, processingLog = []) {
+function limitTextFieldSizes(obj) {
   if (obj === null || typeof obj !== 'object') {
     return obj;
   }
 
   if (Array.isArray(obj)) {
-    return obj.map(item => limitTextFieldSizes(item, processingLog));
+    return obj.map(item => limitTextFieldSizes(item));
   }
 
   const processed = {};
@@ -248,16 +248,15 @@ function limitTextFieldSizes(obj, processingLog = []) {
   for (const [key, value] of Object.entries(obj)) {
     if (typeof value === 'string' && value.length > MAX_TEXT_LENGTH) {
       processed[key] = value.substring(0, MAX_TEXT_LENGTH) + '... [TRUNCATED]';
-      processingLog.push(`Truncated field '${key}' from ${value.length} to ${MAX_TEXT_LENGTH} characters`);
     } else {
-      processed[key] = limitTextFieldSizes(value, processingLog);
+      processed[key] = limitTextFieldSizes(value);
     }
   }
 
   return processed;
 }
 
-// Extract citations into a separate parsable section
+// Extract citations into a separate parsable section - simplified
 function extractAndFormatCitations(response) {
   const citations = [];
   const citationMap = new Map();
@@ -267,68 +266,30 @@ function extractAndFormatCitations(response) {
     if (!content || !Array.isArray(content)) return;
 
     for (const item of content) {
-      // Handle standard Claude API citations format
+      // Handle standard Claude API citations format - simplified
       if (item.citations && Array.isArray(item.citations)) {
         for (const citation of item.citations) {
-          const key = citation.document_title + citation.cited_text + citation.document_index;
+          const key = citation.document_title + citation.document_index;
           if (!citationMap.has(key)) {
             citationMap.set(key, {
               id: citationId++,
-              type: 'citation',
-              document_title: citation.document_title,
-              document_index: citation.document_index,
-              cited_text: citation.cited_text,
-              location_type: citation.type,
-              ...(citation.start_char_index !== undefined && {
-                start_char_index: citation.start_char_index,
-                end_char_index: citation.end_char_index
-              }),
-              ...(citation.start_page_number !== undefined && {
-                start_page_number: citation.start_page_number,
-                end_page_number: citation.end_page_number
-              }),
-              ...(citation.start_block_index !== undefined && {
-                start_block_index: citation.start_block_index,
-                end_block_index: citation.end_block_index
-              })
+              title: citation.document_title,
+              text: citation.cited_text?.substring(0, 200) || ''  // Limit text length
             });
           }
         }
       }
 
-      // Handle web search citations (legacy format from your current system)
-      if (item.type === 'text' && item.text) {
-        // Extract <cite> tags from text
-        const citeRegex = /<cite[^>]*index="([^"]+)"[^>]*>([^<]+)<\/cite>/g;
-        let match;
-        while ((match = citeRegex.exec(item.text)) !== null) {
-          const [, index, citedText] = match;
-          const key = `legacy_${index}_${citedText}`;
-          if (!citationMap.has(key)) {
-            citationMap.set(key, {
-              id: citationId++,
-              type: 'citation',
-              source_type: 'legacy_cite_tag',
-              index: index,
-              cited_text: citedText
-            });
-          }
-        }
-      }
-
-      // Handle tool results with search data
+      // Handle web search citations - essential fields only
       if (item.type === 'web_search_tool_result' && item.content) {
         for (const searchItem of item.content) {
           if (searchItem.type === 'web_search_result' && searchItem.url && searchItem.title) {
-            const key = `web_${searchItem.url}`;
+            const key = searchItem.url;
             if (!citationMap.has(key)) {
               citationMap.set(key, {
                 id: citationId++,
-                type: 'citation',
-                source_type: 'web_search_result',
-                title: searchItem.title,
-                url: searchItem.url,
-                ...(searchItem.page_age && { page_age: searchItem.page_age })
+                title: searchItem.title.substring(0, 100),  // Limit title length
+                url: searchItem.url
               });
             }
           }
@@ -346,39 +307,26 @@ function extractAndFormatCitations(response) {
 }
 
 // Ensure thinking, citations, and main response are easily parsable
-function ensureParsableStructure(response, processingLog) {
+function ensureParsableStructure(response) {
   const structured = { ...response };
   
-  // Create consistent parsed sections for easy access
+  // Create lightweight parsed sections with references, not duplicates
   structured.parsed_content = {
-    main_text: '',
-    thinking: '',
-    citations: structured.citations || []
+    main_text_index: null,      // Index of main text in content array
+    thinking_index: null,       // Index of thinking in content array  
+    citation_count: (structured.citations || []).length
   };
   
-  // Extract main content and thinking from content array
+  // Find indices instead of duplicating content
   if (structured.content && Array.isArray(structured.content)) {
-    for (const item of structured.content) {
-      if (item.type === 'text' && item.text) {
-        structured.parsed_content.main_text += (structured.parsed_content.main_text ? '\n\n' : '') + item.text;
-      } else if (item.type === 'thinking' && item.thinking) {
-        structured.parsed_content.thinking += (structured.parsed_content.thinking ? '\n\n' : '') + item.thinking;
+    for (let i = 0; i < structured.content.length; i++) {
+      const item = structured.content[i];
+      if (item.type === 'text' && item.text && structured.parsed_content.main_text_index === null) {
+        structured.parsed_content.main_text_index = i;
+      } else if (item.type === 'thinking' && item.thinking && structured.parsed_content.thinking_index === null) {
+        structured.parsed_content.thinking_index = i;
       }
     }
-    
-    processingLog.push('Created parsed_content structure for easy access');
-  }
-  
-  // Ensure fields don't exceed 45k limit
-  const MAX_LENGTH = 45000;
-  if (structured.parsed_content.main_text.length > MAX_LENGTH) {
-    structured.parsed_content.main_text = structured.parsed_content.main_text.substring(0, MAX_LENGTH) + '... [TRUNCATED]';
-    processingLog.push('Truncated main_text in parsed_content');
-  }
-  
-  if (structured.parsed_content.thinking.length > MAX_LENGTH) {
-    structured.parsed_content.thinking = structured.parsed_content.thinking.substring(0, MAX_LENGTH) + '... [TRUNCATED]';
-    processingLog.push('Truncated thinking in parsed_content');
   }
   
   return structured;
@@ -630,7 +578,6 @@ async function callClaudeAPI(payload) {
 
 function processClaudeResponseWithSizeControl(claudeResponse, requestPayload) {
   const { modelPricing } = requestPayload;
-  const processingLog = [];
 
   // Start with Claude's standard response wrapper - minimal changes
   let processedResponse = { ...claudeResponse };
@@ -639,17 +586,16 @@ function processClaudeResponseWithSizeControl(claudeResponse, requestPayload) {
   processedResponse = removeSpecificSensitiveFields(processedResponse);
   
   // Apply 45k character limit to individual text fields
-  processedResponse = limitTextFieldSizes(processedResponse, processingLog);
+  processedResponse = limitTextFieldSizes(processedResponse);
   
   // Extract and format citations as separate parsable section
   const citations = extractAndFormatCitations(processedResponse);
   if (citations.length > 0) {
     processedResponse.citations = citations;
-    processingLog.push(`Extracted ${citations.length} citations`);
   }
   
   // Ensure consistent parsable structure for main components
-  processedResponse = ensureParsableStructure(processedResponse, processingLog);
+  processedResponse = ensureParsableStructure(processedResponse);
 
   // Add cost calculation (always included)
   if (modelPricing && claudeResponse.usage) {
@@ -672,12 +618,10 @@ function processClaudeResponseWithSizeControl(claudeResponse, requestPayload) {
   processedResponse.requestId = requestPayload.requestId;
   processedResponse.completedAt = new Date().toISOString();
   
-  // Add processing info
+  // Add minimal processing info
   processedResponse._processingInfo = {
-    originalSizeChars: JSON.stringify(claudeResponse).length,
-    finalSizeChars: JSON.stringify(processedResponse).length,
-    citationsExtracted: citations.length,
-    processingLog: processingLog
+    size_reduction: `${JSON.stringify(claudeResponse).length} → ${JSON.stringify(processedResponse).length} chars`,
+    citations: citations.length
   };
 
   return processedResponse;

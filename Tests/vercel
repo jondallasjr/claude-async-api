@@ -1,0 +1,557 @@
+2025-09-12T07:56:03.777Z [info] Processing request req_1757663761001_62342w9q5
+2025-09-12T07:56:03.777Z [info] 🎯 Triggered by: Supabase-pg_net-15min-timeout
+2025-09-12T07:56:03.778Z [info] 📊 Trigger source details: {
+  userAgent: 'Supabase-pg_net-15min-timeout',
+  contentLength: '44',
+  requestSource: 'pg_net'
+}
+2025-09-12T07:56:05.610Z [info] Calling Claude API for req_1757663761001_62342w9q5
+2025-09-12T07:56:05.611Z [info] ✅ API Key validation passed - Length: 108, Prefix: sk-ant-api...
+2025-09-12T07:56:05.611Z [info] 📤 Sending request to Claude API: {
+  "requestId": "req_1757663761001_62342w9q5",
+  "model": "claude-sonnet-4-20250514",
+  "messageCount": 1,
+  "hasSystem": true,
+  "hasTools": true,
+  "hasThinking": true,
+  "thinkingBudget": 2000,
+  "maxTokens": 50000
+}
+2025-09-12T07:56:05.611Z [info] ⏱️ Timeout layers: undici=12min, abort=11min, vercel=13.3min
+2025-09-12T07:56:05.611Z [info] 🚀 Attempt 1: Sending request to Claude API...
+2025-09-12T07:56:56.927Z [info] 📡 Response received in 51316ms with status: 200
+2025-09-12T07:56:56.955Z [info] ✅ Claude API success: {
+  model: 'claude-sonnet-4-20250514',
+  usage: {
+    input_tokens: 66502,
+    cache_creation_input_tokens: 0,
+    cache_read_input_tokens: 0,
+    cache_creation: { ephemeral_5m_input_tokens: 0, ephemeral_1h_input_tokens: 0 },
+    output_tokens: 1490,
+    service_tier: 'standard',
+    server_tool_use: { web_search_requests: 2, web_fetch_requests: 0 }
+  },
+  contentLength: 0,
+  hasThinking: true,
+  responseTimeMs: 51316
+}
+2025-09-12T07:56:56.955Z [info] Claude completed for req_1757663761001_62342w9q5
+2025-09-12T07:56:56.960Z [info] Processed response: {
+  "id": "msg_01QM1xmtPBC7gcBvnTVnayc8",
+  "type": "message",
+  "role": "assistant",
+  "model": "claude-sonnet-4-20250514",
+  "content": [
+    {
+      "type": "thinking",
+      "thinking": "The user wants me to generate child entities for \"SECTION: SUPERCHARGE YOUR PRACTICE WITH AI\" which is part of Will Richardson's \"The High Paid Consultant\" course at Rule Benders Academy.\n\nLet me first research AI tools and applications for consulting to understand what would be most relevant for this section.\n\nLooking at the target entity description: \"Leverage cutting-edge AI tools and productivity technologies to deliver exceptional results faster than traditional consultants. Learn the specific AI prompts, automation workflows, and digital tools that multiply your effectiveness while reducing time investment. You'll master the tech stack that gives modern consultants an unfair advantage in the marketplace.\"\n\nThe hierarchy is Company > Instructor > Course > Section > Lesson > Topic, so I need to create Lessons (and potentially Topics if needed) under this Section.\n\nBased on the Rule Benders philosophy and Will Richardson's approach, I should focus on:\n1. Practical, immediately actionable AI tools and techniques\n2. Specific prompts and workflows\n3. Unfair advantages and shortcuts\n4. Tech stack that consultants can implement right away\n5. Results-focused outcomes\n\nLet me research current AI tools and applications that would be most valuable for consultants."
+    },
+    {
+      "type": "server_tool_use",
+      "id": "srvtoolu_01SV1i57zku7Mz6dNKVvzB4o",
+      "name": "web_search",
+      "input": {
+        "query": "AI tools consulting productivity 2025"
+      }
+    },
+    {
+      "type": "web_search_tool_result",
+      "tool_use_id": "srvtoolu_01SV1i57zku7Mz6dNKVvzB4o",
+      "content": [
+        {
+          "type": "web_search_result",
+          "title": "AI in the workplace: A report for 2025 | McKinsey",
+          "url": "https://www.mckinsey.com/capabilities/mckinsey-digital/our-insights/superagency-in-the-workplace-empowering-people-to-unlock-ais-full-potential-at-work",
+          "page_age": "January 28, 2025"
+        },
+        {
+          "type": "web_search_result",
+          "title": "The best AI productivity tools in 2025 | Zapier",
+          "url": "https://zapier.com/blog/best-ai-productivity-tools/",
+          "page_age": "October 2, 2024"
+        },
+        {
+          "type": "web_search_result",
+          "title": "Measuring the Impact of Early-2025 AI on Experienced Open-Source Developer Productivity - METR",
+          "url": "https://metr.org/blog/2025-07-10-early-2025-ai-experienced-os-dev-study/",
+          "page_age": "July 10, 2025"
+        },
+        {
+          "type": "web_search_result",
+          "title": "AI Productivity Tools & Software for 2025",
+          "url": "https://www.futurepedia.io/ai-tools/productivity",
+          "page_age": null
+        },
+        {
+          "type": "web_search_result",
+          "title": "AI at Work 2025: Momentum Builds, but Gaps Remain | BCG",
+          "url": "https://www.bcg.com/publications/2025/ai-at-work-momentum-builds-but-gaps-remain",
+          "page_age": "July 22, 2025"
+        },
+        {
+          "type": "web_search_result",
+          "title": "Best AI productivity tools (2025): 18 tools to help you work smarter, not harder - Plus",
+          "url": "https://plusai.com/blog/best-ai-productivity-tools",
+          "page_age": null
+        },
+        {
+          "type": "web_search_result",
+          "title": "The Projected Impact of Generative AI on Future Productivity Growth — Penn Wharton Budget Model",
+          "url": "https://budgetmodel.wharton.upenn.edu/issues/2025/9/8/projected-impact-of-generative-ai-on-future-productivity-growth",
+          "page_age": "2 days ago"
+        },
+        {
+          "type": "web_search_result",
+          "title": "We Tested 50+ AI Productivity Tools. Here Are The 16 Best Tools | Motion",
+          "url": "https://www.usemotion.com/blog/ai-productivity-tools",
+          "page_age": null
+        },
+        {
+          "type": "web_search_result",
+          "title": "The Best AI Productivity Tools in 2025 | Webex",
+          "url": "https://blog.webex.com/innovation-ai/the-ai-productivity-tools-shaping-2025/",
+          "page_age": "February 6, 2025"
+        },
+        {
+          "type": "web_search_result",
+          "title": "The Best AI Solutions for Consultants in 2025: What's really helping you scale? | Olive Technologies",
+          "url": "https://olive.app/blog/the-best-ai-solutions-for-consultants-in-2025-whats-driving-real-business-impact/",
+          "page_age": "January 30, 2025"
+        }
+      ]
+    },
+    {
+      "type": "server_tool_use",
+      "id": "srvtoolu_01Maw8Lnb6kEzRVWZLqu11u2",
+      "name": "web_search",
+      "input": {
+        "query": "AI prompts consulting templates 2025"
+      }
+    },
+    {
+      "type": "web_search_tool_result",
+      "tool_use_id": "srvtoolu_01Maw8Lnb6kEzRVWZLqu11u2",
+      "content": [
+        {
+          "type": "web_search_result",
+          "title": "40+ ChatGPT Prompts For Businesses in 2025 - AI Chatbot Platform - Put Messaging On Auto-Pilot With ChitChatBot.ai",
+          "url": "https://chitchatbot.ai/40-plus-chatgpt-prompts-for-businesses-in-2025/",
+          "page_age": "April 17, 2025"
+        },
+        {
+          "type": "web_search_result",
+          "title": "8 GenAI prompts every consulting firm should use - Templafy",
+          "url": "https://www.templafy.com/8-genai-prompts-every-consulting-firm-should-use/",
+          "page_age": "November 26, 2024"
+        },
+        {
+          "type": "web_search_result",
+          "title": "The Ultimate ChatGPT Prompt Guide for Consultants | Olive Technologies",
+          "url": "https://olive.app/blog/the-ultimate-chatgpt-prompt-guide-for-consultants/",
+          "page_age": "March 8, 2025"
+        },
+        {
+          "type": "web_search_result",
+          "title": "Prompt engineering is so 2024. Try these prompt templates instead | MIT Sloan",
+          "url": "https://mitsloan.mit.edu/ideas-made-to-matter/prompt-engineering-so-2024-try-these-prompt-templates-instead",
+          "page_age": "3 weeks ago"
+        },
+        {
+          "type": "web_search_result",
+          "title": "114 AI Prompts for Businesses in 2025 | LocaliQ",
+          "url": "https://localiq.com/blog/ai-prompts-for-business/",
+          "page_age": "April 24, 2025"
+        },
+        {
+          "type": "web_search_result",
+          "title": "We Tested the Best 15+ AI Prompts for Presentations in 2025",
+          "url": "https://www.superside.com/blog/ai-prompts-presentations",
+          "page_age": null
+        },
+        {
+          "type": "web_search_result",
+          "title": "The Complete AI Bundle for Consultants in 2025. - Ascend",
+          "url": "https://aiforconsultants.com/consultancyprompts",
+          "page_age": null
+        },
+        {
+          "type": "web_search_result",
+          "title": "McKinsey leans on AI to make PowerPoints faster, draft proposals | Fortune",
+          "url": "https://fortune.com/2025/06/02/mckinsey-ai-consulting-powerpoints-proposal-technology/",
+          "page_age": "June 2, 2025"
+        },
+        {
+          "type": "web_search_result",
+          "title": "Using AI in Consulting: A Full Guide with Prompt-based Examples |UPDF",
+          "url": "https://updf.com/chatgpt/how-to-use-ai-in-consulting/",
+          "page_age": "July 19, 2024"
+        },
+        {
+          "type": "web_search_result",
+          "title": "Chatgpt Consultant Prompts • PromptDen",
+          "url": "https://promptden.com/prompts/chatgpt/consultant+all",
+          "page_age": null
+        }
+      ]
+    },
+    {
+      "type": "text",
+      "text": "{\n  \"thinking\": \"Based on my research and analysis of the target entity \\\"SECTION: SUPERCHARGE YOUR PRACTICE WITH AI\\\" within Will Richardson's \\\"The High Paid Consultant\\\" course, I need to create 4-8 child lessons that align with the Rule Benders philosophy and Will's practical, experience-driven approach.\\n\\nFrom the research, I can see that:\\n1. AI tools are being widely adopted by consultants (26.4% of workers used AI at work in 2024)\\n2. Key areas include productivity tools, research automation, client management, and document creation\\n3. Consultants need practical, immediately actionable AI implementations\\n4. The focus should be on tools that provide unfair advantages and shortcuts\\n\\nBased on the Rule Benders guidelines and Will's teaching philosophy, I should create lessons that:\\n- Focus on specific, actionable AI tools and prompts\\n- Provide immediate shortcuts and advantages\\n- Are experience-driven and practical\\n- Help position consultants as high-value professionals\\n- Follow the \\\"cheat sheet\\\" mentality\\n- Include specific frameworks and templates\\n\\nI'll create 6 lessons that cover the most impactful AI applications for consultants, following the naming conventions and content structure outlined in the guidelines.\",\n  \"children\": [\n    {\n      \"name\": \"Master AI Research and Analysis Workflows\",\n      \"entityType\": \"Lesson\",\n      \"description\": \"Transform your research capabilities using AI-powered tools and proven prompt frameworks that deliver client-ready insights in minutes instead of hours. You'll master the specific prompts that extract market intelligence, competitive analysis, and industry trends from vast data sources—the same techniques that allow £2,000/day consultants to deliver comprehensive research faster than traditional analysts. Includes Will's battle-tested prompt library for market research, stakeholder mapping, and risk assessment that consistently produces professional-grade outputs.\",\n      \"priority\": \"Essential\"\n    },\n    {\n      \"name\": \"AI-Powered Client Discovery and Scoping\",\n      \"entityType\": \"Lesson\", \n      \"description\": \"Leverage AI to accelerate client discovery, requirement gathering, and project scoping using automated intake workflows and intelligent questioning frameworks. Learn the specific AI prompts and tools that help you uncover client needs, identify hidden opportunities, and position solutions faster than competitors. You'll get Will's proven templates for stakeholder interviews, needs analysis, and project scoping that eliminate the guesswork and position you as the strategic advisor from day one.\",\n      \"priority\": \"Essential\"\n    },\n    {\n      \"name\": \"Hack Proposal and Document Creation\",\n      \"entityType\": \"Lesson\",\n      \"description\": \"Master the AI tools and templates that create compelling proposals, executive summaries, and client deliverables in a fraction of the time. Discover the specific prompts and workflows that McKinsey and BCG consultants use to generate professional presentations and reports. You'll learn Will's framework for AI-assisted document creation, including tone calibration, structure optimization, and visual enhancement techniques that consistently win client approval.\",\n      \"priority\": \"Essential\"\n    },\n    {\n      \"name\": \"Automate Administrative Tasks and Client Management\", \n      \"entityType\": \"Lesson\",\n      \"description\": \"Eliminate time-draining administrative work using AI automation tools for scheduling, email management, project tracking, and client communication. Learn the specific AI workflows that free up 10+ hours per week for high-value consulting activities. You'll master the tools and integrations that handle routine tasks automatically, from meeting summaries to follow-up sequences, allowing you to focus on strategy and relationship building that drives premium rates.\",\n      \"priority\": \"Very Important\"\n    },\n    {\n      \"name\": \"Build Your AI-Enhanced Consulting Toolkit\",\n      \"entityType\": \"Lesson\", \n      \"description\": \"Assemble the complete AI tech stack that gives modern consultants an unfair advantage—from research tools to presentation creators to data analyzers. Get Will's curated list of essential AI tools with specific use cases, integration strategies, and ROI calculations. You'll learn which tools to prioritize for your consulting focus, how to combine them for maximum impact, and the investment framework for scaling your AI capabilities as your practice grows.\",\n      \"priority\": \"Important\"\n    },\n    {\n      \"name\": \"Create AI-Generated Content That Positions You as the Expert\",\n      \"entityType\": \"Lesson\",\n      \"description\": \"Use AI to develop thought leadership content, industry insights, and expertise demonstrations that attract premium clients without the typical time investment. Learn the proven prompts and content strategies that establish your authority in your consulting niche. You'll master Will's framework for AI-assisted content creation including LinkedIn articles, industry analyses, and speaking materials that position you as the go-to expert and drive inbound enquiries.\",\n      \"priority\": \"Important\"\n    }\n  ]\n}"
+    }
+  ],
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "usage": {
+    "input_tokens": 66502,
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 0,
+    "cache_creation": {
+      "ephemeral_5m_input_tokens": 0,
+      "ephemeral_1h_input_tokens": 0
+    },
+    "output_tokens": 1490,
+    "service_tier": "standard",
+    "server_tool_use": {
+      "web_search_requests": 2,
+      "web_fetch_requests": 0
+    }
+  },
+  "citations": [
+    {
+      "id": 1,
+      "type": "citation",
+      "source_type": "web_search_result",
+      "title": "AI in the workplace: A report for 2025 | McKinsey",
+      "url": "https://www.mckinsey.com/capabilities/mckinsey-digital/our-insights/superagency-in-the-workplace-empowering-people-to-unlock-ais-full-potential-at-work",
+      "page_age": "January 28, 2025"
+    },
+    {
+      "id": 2,
+      "type": "citation",
+      "source_type": "web_search_result",
+      "title": "The best AI productivity tools in 2025 | Zapier",
+      "url": "https://zapier.com/blog/best-ai-productivity-tools/",
+      "page_age": "October 2, 2024"
+    },
+    {
+      "id": 3,
+      "type": "citation",
+      "source_type": "web_search_result",
+      "title": "Measuring the Impact of Early-2025 AI on Experienced Open-Source Developer Productivity - METR",
+      "url": "https://metr.org/blog/2025-07-10-early-2025-ai-experienced-os-dev-study/",
+      "page_age": "July 10, 2025"
+    },
+    {
+      "id": 4,
+      "type": "citation",
+      "source_type": "web_search_result",
+      "title": "AI Productivity Tools & Software for 2025",
+      "url": "https://www.futurepedia.io/ai-tools/productivity"
+    },
+    {
+      "id": 5,
+      "type": "citation",
+      "source_type": "web_search_result",
+      "title": "AI at Work 2025: Momentum Builds, but Gaps Remain | BCG",
+      "url": "https://www.bcg.com/publications/2025/ai-at-work-momentum-builds-but-gaps-remain",
+      "page_age": "July 22, 2025"
+    },
+    {
+      "id": 6,
+      "type": "citation",
+      "source_type": "web_search_result",
+      "title": "Best AI productivity tools (2025): 18 tools to help you work smarter, not harder - Plus",
+      "url": "https://plusai.com/blog/best-ai-productivity-tools"
+    },
+    {
+      "id": 7,
+      "type": "citation",
+      "source_type": "web_search_result",
+      "title": "The Projected Impact of Generative AI on Future Productivity Growth — Penn Wharton Budget Model",
+      "url": "https://budgetmodel.wharton.upenn.edu/issues/2025/9/8/projected-impact-of-generative-ai-on-future-productivity-growth",
+      "page_age": "2 days ago"
+    },
+    {
+      "id": 8,
+      "type": "citation",
+      "source_type": "web_search_result",
+      "title": "We Tested 50+ AI Productivity Tools. Here Are The 16 Best Tools | Motion",
+      "url": "https://www.usemotion.com/blog/ai-productivity-tools"
+    },
+    {
+      "id": 9,
+      "type": "citation",
+      "source_type": "web_search_result",
+      "title": "The Best AI Productivity Tools in 2025 | Webex",
+      "url": "https://blog.webex.com/innovation-ai/the-ai-productivity-tools-shaping-2025/",
+      "page_age": "February 6, 2025"
+    },
+    {
+      "id": 10,
+      "type": "citation",
+      "source_type": "web_search_result",
+      "title": "The Best AI Solutions for Consultants in 2025: What's really helping you scale? | Olive Technologies",
+      "url": "https://olive.app/blog/the-best-ai-solutions-for-consultants-in-2025-whats-driving-real-business-impact/",
+      "page_age": "January 30, 2025"
+    },
+    {
+      "id": 11,
+      "type": "citation",
+      "source_type": "web_search_result",
+      "title": "40+ ChatGPT Prompts For Businesses in 2025 - AI Chatbot Platform - Put Messaging On Auto-Pilot With ChitChatBot.ai",
+      "url": "https://chitchatbot.ai/40-plus-chatgpt-prompts-for-businesses-in-2025/",
+      "page_age": "April 17, 2025"
+    },
+    {
+      "id": 12,
+      "type": "citation",
+      "source_type": "web_search_result",
+      "title": "8 GenAI prompts every consulting firm should use - Templafy",
+      "url": "https://www.templafy.com/8-genai-prompts-every-consulting-firm-should-use/",
+      "page_age": "November 26, 2024"
+    },
+    {
+      "id": 13,
+      "type": "citation",
+      "source_type": "web_search_result",
+      "title": "The Ultimate ChatGPT Prompt Guide for Consultants | Olive Technologies",
+      "url": "https://olive.app/blog/the-ultimate-chatgpt-prompt-guide-for-consultants/",
+      "page_age": "March 8, 2025"
+    },
+    {
+      "id": 14,
+      "type": "citation",
+      "source_type": "web_search_result",
+      "title": "Prompt engineering is so 2024. Try these prompt templates instead | MIT Sloan",
+      "url": "https://mitsloan.mit.edu/ideas-made-to-matter/prompt-engineering-so-2024-try-these-prompt-templates-instead",
+      "page_age": "3 weeks ago"
+    },
+    {
+      "id": 15,
+      "type": "citation",
+      "source_type": "web_search_result",
+      "title": "114 AI Prompts for Businesses in 2025 | LocaliQ",
+      "url": "https://localiq.com/blog/ai-prompts-for-business/",
+      "page_age": "April 24, 2025"
+    },
+    {
+      "id": 16,
+      "type": "citation",
+      "source_type": "web_search_result",
+      "title": "We Tested the Best 15+ AI Prompts for Presentations in 2025",
+      "url": "https://www.superside.com/blog/ai-prompts-presentations"
+    },
+    {
+      "id": 17,
+      "type": "citation",
+      "source_type": "web_search_result",
+      "title": "The Complete AI Bundle for Consultants in 2025. - Ascend",
+      "url": "https://aiforconsultants.com/consultancyprompts"
+    },
+    {
+      "id": 18,
+      "type": "citation",
+      "source_type": "web_search_result",
+      "title": "McKinsey leans on AI to make PowerPoints faster, draft proposals | Fortune",
+      "url": "https://fortune.com/2025/06/02/mckinsey-ai-consulting-powerpoints-proposal-technology/",
+      "page_age": "June 2, 2025"
+    },
+    {
+      "id": 19,
+      "type": "citation",
+      "source_type": "web_search_result",
+      "title": "Using AI in Consulting: A Full Guide with Prompt-based Examples |UPDF",
+      "url": "https://updf.com/chatgpt/how-to-use-ai-in-consulting/",
+      "page_age": "July 19, 2024"
+    },
+    {
+      "id": 20,
+      "type": "citation",
+      "source_type": "web_search_result",
+      "title": "Chatgpt Consultant Prompts • PromptDen",
+      "url": "https://promptden.com/prompts/chatgpt/consultant+all"
+    }
+  ],
+  "parsed_content": {
+    "main_text": "{\n  \"thinking\": \"Based on my research and analysis of the target entity \\\"SECTION: SUPERCHARGE YOUR PRACTICE WITH AI\\\" within Will Richardson's \\\"The High Paid Consultant\\\" course, I need to create 4-8 child lessons that align with the Rule Benders philosophy and Will's practical, experience-driven approach.\\n\\nFrom the research, I can see that:\\n1. AI tools are being widely adopted by consultants (26.4% of workers used AI at work in 2024)\\n2. Key areas include productivity tools, research automation, client management, and document creation\\n3. Consultants need practical, immediately actionable AI implementations\\n4. The focus should be on tools that provide unfair advantages and shortcuts\\n\\nBased on the Rule Benders guidelines and Will's teaching philosophy, I should create lessons that:\\n- Focus on specific, actionable AI tools and prompts\\n- Provide immediate shortcuts and advantages\\n- Are experience-driven and practical\\n- Help position consultants as high-value professionals\\n- Follow the \\\"cheat sheet\\\" mentality\\n- Include specific frameworks and templates\\n\\nI'll create 6 lessons that cover the most impactful AI applications for consultants, following the naming conventions and content structure outlined in the guidelines.\",\n  \"children\": [\n    {\n      \"name\": \"Master AI Research and Analysis Workflows\",\n      \"entityType\": \"Lesson\",\n      \"description\": \"Transform your research capabilities using AI-powered tools and proven prompt frameworks that deliver client-ready insights in minutes instead of hours. You'll master the specific prompts that extract market intelligence, competitive analysis, and industry trends from vast data sources—the same techniques that allow £2,000/day consultants to deliver comprehensive research faster than traditional analysts. Includes Will's battle-tested prompt library for market research, stakeholder mapping, and risk assessment that consistently produces professional-grade outputs.\",\n      \"priority\": \"Essential\"\n    },\n    {\n      \"name\": \"AI-Powered Client Discovery and Scoping\",\n      \"entityType\": \"Lesson\", \n      \"description\": \"Leverage AI to accelerate client discovery, requirement gathering, and project scoping using automated intake workflows and intelligent questioning frameworks. Learn the specific AI prompts and tools that help you uncover client needs, identify hidden opportunities, and position solutions faster than competitors. You'll get Will's proven templates for stakeholder interviews, needs analysis, and project scoping that eliminate the guesswork and position you as the strategic advisor from day one.\",\n      \"priority\": \"Essential\"\n    },\n    {\n      \"name\": \"Hack Proposal and Document Creation\",\n      \"entityType\": \"Lesson\",\n      \"description\": \"Master the AI tools and templates that create compelling proposals, executive summaries, and client deliverables in a fraction of the time. Discover the specific prompts and workflows that McKinsey and BCG consultants use to generate professional presentations and reports. You'll learn Will's framework for AI-assisted document creation, including tone calibration, structure optimization, and visual enhancement techniques that consistently win client approval.\",\n      \"priority\": \"Essential\"\n    },\n    {\n      \"name\": \"Automate Administrative Tasks and Client Management\", \n      \"entityType\": \"Lesson\",\n      \"description\": \"Eliminate time-draining administrative work using AI automation tools for scheduling, email management, project tracking, and client communication. Learn the specific AI workflows that free up 10+ hours per week for high-value consulting activities. You'll master the tools and integrations that handle routine tasks automatically, from meeting summaries to follow-up sequences, allowing you to focus on strategy and relationship building that drives premium rates.\",\n      \"priority\": \"Very Important\"\n    },\n    {\n      \"name\": \"Build Your AI-Enhanced Consulting Toolkit\",\n      \"entityType\": \"Lesson\", \n      \"description\": \"Assemble the complete AI tech stack that gives modern consultants an unfair advantage—from research tools to presentation creators to data analyzers. Get Will's curated list of essential AI tools with specific use cases, integration strategies, and ROI calculations. You'll learn which tools to prioritize for your consulting focus, how to combine them for maximum impact, and the investment framework for scaling your AI capabilities as your practice grows.\",\n      \"priority\": \"Important\"\n    },\n    {\n      \"name\": \"Create AI-Generated Content That Positions You as the Expert\",\n      \"entityType\": \"Lesson\",\n      \"description\": \"Use AI to develop thought leadership content, industry insights, and expertise demonstrations that attract premium clients without the typical time investment. Learn the proven prompts and content strategies that establish your authority in your consulting niche. You'll master Will's framework for AI-assisted content creation including LinkedIn articles, industry analyses, and speaking materials that position you as the go-to expert and drive inbound enquiries.\",\n      \"priority\": \"Important\"\n    }\n  ]\n}",
+    "thinking": "The user wants me to generate child entities for \"SECTION: SUPERCHARGE YOUR PRACTICE WITH AI\" which is part of Will Richardson's \"The High Paid Consultant\" course at Rule Benders Academy.\n\nLet me first research AI tools and applications for consulting to understand what would be most relevant for this section.\n\nLooking at the target entity description: \"Leverage cutting-edge AI tools and productivity technologies to deliver exceptional results faster than traditional consultants. Learn the specific AI prompts, automation workflows, and digital tools that multiply your effectiveness while reducing time investment. You'll master the tech stack that gives modern consultants an unfair advantage in the marketplace.\"\n\nThe hierarchy is Company > Instructor > Course > Section > Lesson > Topic, so I need to create Lessons (and potentially Topics if needed) under this Section.\n\nBased on the Rule Benders philosophy and Will Richardson's approach, I should focus on:\n1. Practical, immediately actionable AI tools and techniques\n2. Specific prompts and workflows\n3. Unfair advantages and shortcuts\n4. Tech stack that consultants can implement right away\n5. Results-focused outcomes\n\nLet me research current AI tools and applications that would be most valuable for consultants.",
+    "citations": [
+      {
+        "id": 1,
+        "type": "citation",
+        "source_type": "web_search_result",
+        "title": "AI in the workplace: A report for 2025 | McKinsey",
+        "url": "https://www.mckinsey.com/capabilities/mckinsey-digital/our-insights/superagency-in-the-workplace-empowering-people-to-unlock-ais-full-potential-at-work",
+        "page_age": "January 28, 2025"
+      },
+      {
+        "id": 2,
+        "type": "citation",
+        "source_type": "web_search_result",
+        "title": "The best AI productivity tools in 2025 | Zapier",
+        "url": "https://zapier.com/blog/best-ai-productivity-tools/",
+        "page_age": "October 2, 2024"
+      },
+      {
+        "id": 3,
+        "type": "citation",
+        "source_type": "web_search_result",
+        "title": "Measuring the Impact of Early-2025 AI on Experienced Open-Source Developer Productivity - METR",
+        "url": "https://metr.org/blog/2025-07-10-early-2025-ai-experienced-os-dev-study/",
+        "page_age": "July 10, 2025"
+      },
+      {
+        "id": 4,
+        "type": "citation",
+        "source_type": "web_search_result",
+        "title": "AI Productivity Tools & Software for 2025",
+        "url": "https://www.futurepedia.io/ai-tools/productivity"
+      },
+      {
+        "id": 5,
+        "type": "citation",
+        "source_type": "web_search_result",
+        "title": "AI at Work 2025: Momentum Builds, but Gaps Remain | BCG",
+        "url": "https://www.bcg.com/publications/2025/ai-at-work-momentum-builds-but-gaps-remain",
+        "page_age": "July 22, 2025"
+      },
+      {
+        "id": 6,
+        "type": "citation",
+        "source_type": "web_search_result",
+        "title": "Best AI productivity tools (2025): 18 tools to help you work smarter, not harder - Plus",
+        "url": "https://plusai.com/blog/best-ai-productivity-tools"
+      },
+      {
+        "id": 7,
+        "type": "citation",
+        "source_type": "web_search_result",
+        "title": "The Projected Impact of Generative AI on Future Productivity Growth — Penn Wharton Budget Model",
+        "url": "https://budgetmodel.wharton.upenn.edu/issues/2025/9/8/projected-impact-of-generative-ai-on-future-productivity-growth",
+        "page_age": "2 days ago"
+      },
+      {
+        "id": 8,
+        "type": "citation",
+        "source_type": "web_search_result",
+        "title": "We Tested 50+ AI Productivity Tools. Here Are The 16 Best Tools | Motion",
+        "url": "https://www.usemotion.com/blog/ai-productivity-tools"
+      },
+      {
+        "id": 9,
+        "type": "citation",
+        "source_type": "web_search_result",
+        "title": "The Best AI Productivity Tools in 2025 | Webex",
+        "url": "https://blog.webex.com/innovation-ai/the-ai-productivity-tools-shaping-2025/",
+        "page_age": "February 6, 2025"
+      },
+      {
+        "id": 10,
+        "type": "citation",
+        "source_type": "web_search_result",
+        "title": "The Best AI Solutions for Consultants in 2025: What's really helping you scale? | Olive Technologies",
+        "url": "https://olive.app/blog/the-best-ai-solutions-for-consultants-in-2025-whats-driving-real-business-impact/",
+        "page_age": "January 30, 2025"
+      },
+      {
+        "id": 11,
+        "type": "citation",
+        "source_type": "web_search_result",
+        "title": "40+ ChatGPT Prompts For Businesses in 2025 - AI Chatbot Platform - Put Messaging On Auto-Pilot With ChitChatBot.ai",
+        "url": "https://chitchatbot.ai/40-plus-chatgpt-prompts-for-businesses-in-2025/",
+        "page_age": "April 17, 2025"
+      },
+      {
+        "id": 12,
+        "type": "citation",
+        "source_type": "web_search_result",
+        "title": "8 GenAI prompts every consulting firm should use - Templafy",
+        "url": "https://www.templafy.com/8-genai-prompts-every-consulting-firm-should-use/",
+        "page_age": "November 26, 2024"
+      },
+      {
+        "id": 13,
+        "type": "citation",
+        "source_type": "web_search_result",
+        "title": "The Ultimate ChatGPT Prompt Guide for Consultants | Olive Technologies",
+        "url": "https://olive.app/blog/the-ultimate-chatgpt-prompt-guide-for-consultants/",
+        "page_age": "March 8, 2025"
+      },
+      {
+        "id": 14,
+        "type": "citation",
+        "source_type": "web_search_result",
+        "title": "Prompt engineering is so 2024. Try these prompt templates instead | MIT Sloan",
+        "url": "https://mitsloan.mit.edu/ideas-made-to-matter/prompt-engineering-so-2024-try-these-prompt-templates-instead",
+        "page_age": "3 weeks ago"
+      },
+      {
+        "id": 15,
+        "type": "citation",
+        "source_type": "web_search_result",
+        "title": "114 AI Prompts for Businesses in 2025 | LocaliQ",
+        "url": "https://localiq.com/blog/ai-prompts-for-business/",
+        "page_age": "April 24, 2025"
+      },
+      {
+        "id": 16,
+        "type": "citation",
+        "source_type": "web_search_result",
+        "title": "We Tested the Best 15+ AI Prompts for Presentations in 2025",
+        "url": "https://www.superside.com/blog/ai-prompts-presentations"
+      },
+      {
+        "id": 17,
+        "type": "citation",
+        "source_type": "web_search_result",
+        "title": "The Complete AI Bundle for Consultants in 2025. - Ascend",
+        "url": "https://aiforconsultants.com/consultancyprompts"
+      },
+      {
+        "id": 18,
+        "type": "citation",
+        "source_type": "web_search_result",
+        "title": "McKinsey leans on AI to make PowerPoints faster, draft proposals | Fortune",
+        "url": "https://fortune.com/2025/06/02/mckinsey-ai-consulting-powerpoints-proposal-technology/",
+        "page_age": "June 2, 2025"
+      },
+      {
+        "id": 19,
+        "type": "citation",
+        "source_type": "web_search_result",
+        "title": "Using AI in Consulting: A Full Guide with Prompt-based Examples |UPDF",
+        "url": "https://updf.com/chatgpt/how-to-use-ai-in-consulting/",
+        "page_age": "July 19, 2024"
+      },
+      {
+        "id": 20,
+        "type": "citation",
+        "source_type": "web_search_result",
+        "title": "Chatgpt Consultant Prompts • PromptDen",
+        "url": "https://promptden.com/prompts/chatgpt/consultant+all"
+      }
+    ]
+  },
+  "cost": {
+    "model": "claude-sonnet-4-20250514",
+    "inputTokens": 66502,
+    "outputTokens": 1490,
+    "inputCost": 0.199506,
+    "outputCost": 0.02235,
+    "totalCost": 0.221856,
+    "currency": "USD"
+  },
+  "requestId": "req_1757663761001_62342w9q5",
+  "completedAt": "2025-09-12T07:56:56.956Z",
+  "_processingInfo": {
+    "originalSizeChars": 107640,
+    "finalSizeChars": 28539,
+    "citationsExtracted": 20,
+    "processingLog": [
+      "Extracted 20 citations",
+      "Created parsed_content structure for easy access"
+    ]
+  }
+}
+2025-09-12T07:56:57.840Z [info] Sending direct webhook for req_1757663761001_62342w9q5
+2025-09-12T07:57:02.844Z [info] Direct webhook error: The operation was aborted due to timeout

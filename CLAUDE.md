@@ -39,6 +39,8 @@ This is a **Coda Pack + Vercel API** system for async Claude API processing with
 - **Zero Coupling**: Pack controls Claude API logic, Vercel never modifies requests
 - **Timeout Handling**: undici global dispatcher extends all timeouts to 15 minutes
 - **Async Processing**: Webhook-based delivery removes timeout constraints
+- **Simplified Response**: Returns Claude's standard wrapper with minimal changes, no duplication
+- **Efficient Citations**: Lightweight citation extraction with essential fields only
 
 ### Data Flow
 
