@@ -167,6 +167,26 @@ function processResponseMinimal(claudeResponse, requestPayload) {
   // Clean the response (remove signatures, truncate strings)
   const cleaned = cleanResponse(claudeResponse);
 
+  // Handle JSON content extraction if requested
+  if (requestPayload.responseOptions?.jsonContent) {
+    // Find the main text content
+    const textContent = cleaned.content?.find(item => item.type === 'text');
+    if (textContent?.text) {
+      // Extract just the JSON portion using regex
+      const jsonMatch = textContent.text.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        try {
+          // Validate it's actually JSON
+          JSON.parse(jsonMatch[0]);
+          // Replace the mixed text with clean JSON
+          textContent.text = jsonMatch[0];
+        } catch (e) {
+          console.warn('JSON extraction failed, keeping original text');
+        }
+      }
+    }
+  }
+
   // Add cost calculation
   if (requestPayload.modelPricing && claudeResponse.usage) {
     const { input_tokens, output_tokens } = claudeResponse.usage;
