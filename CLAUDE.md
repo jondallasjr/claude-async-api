@@ -2,6 +2,16 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Processing Approach (Updated 2025-09-12)
+
+**MINIMAL PROCESSING:**
+- Returns Claude's standard response wrapper with minimal changes
+- NO truncation - preserves full response content
+- Removes only signatures and encrypted content (size bloat)  
+- Extracts citations into separate parsable section with essential fields
+- Adds cost calculation and basic metadata
+- Lets Coda formulas handle parsing
+
 ## Development Commands
 
 - `npm run dev` - Start Vercel development server

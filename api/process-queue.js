@@ -5,7 +5,7 @@
 MINIMAL PROCESSING APPROACH:
 - Store Claude's raw response with minimal changes
 - Remove only signatures and encrypted content (size bloat)
-- Truncate any string field to 45k characters (Coda limits)
+- NO truncation - return full response content
 - Add cost calculation and basic metadata
 - Let Coda formulas handle parsing
 */
@@ -139,10 +139,6 @@ export default async function handler(req, res) {
 // Simple recursive function to clean response
 function cleanResponse(obj) {
   if (obj === null || typeof obj !== 'object') {
-    // Truncate strings to 45k characters
-    if (typeof obj === 'string' && obj.length > 45000) {
-      return obj.substring(0, 45000) + '... [TRUNCATED]';
-    }
     return obj;
   }
 
@@ -162,10 +158,66 @@ function cleanResponse(obj) {
   return cleaned;
 }
 
+// Extract citations into a separate parsable section - simplified
+function extractAndFormatCitations(response) {
+  const citations = [];
+  const citationMap = new Map();
+  let citationId = 1;
+
+  function processContent(content) {
+    if (!content || !Array.isArray(content)) return;
+
+    for (const item of content) {
+      // Handle standard Claude API citations format - simplified
+      if (item.citations && Array.isArray(item.citations)) {
+        for (const citation of item.citations) {
+          const key = citation.document_title + citation.document_index;
+          if (!citationMap.has(key)) {
+            citationMap.set(key, {
+              id: citationId++,
+              title: citation.document_title,
+              text: citation.cited_text?.substring(0, 200) || ''  // Limit text length
+            });
+          }
+        }
+      }
+
+      // Handle web search citations - essential fields only
+      if (item.type === 'web_search_tool_result' && item.content) {
+        for (const searchItem of item.content) {
+          if (searchItem.type === 'web_search_result' && searchItem.url && searchItem.title) {
+            const key = searchItem.url;
+            if (!citationMap.has(key)) {
+              citationMap.set(key, {
+                id: citationId++,
+                title: searchItem.title.substring(0, 100),  // Limit title length
+                url: searchItem.url
+              });
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // Process response content
+  if (response.content) {
+    processContent(response.content);
+  }
+
+  return Array.from(citationMap.values());
+}
+
 // Minimal response processing
 function processResponseMinimal(claudeResponse, requestPayload) {
-  // Clean the response (remove signatures, truncate strings)
+  // Clean the response (remove signatures and encrypted content only)
   const cleaned = cleanResponse(claudeResponse);
+
+  // Extract and format citations as separate parsable section
+  const citations = extractAndFormatCitations(cleaned);
+  if (citations.length > 0) {
+    cleaned.citations = citations;
+  }
 
   // Handle JSON content extraction if requested
   if (requestPayload.responseOptions?.jsonContent) {
