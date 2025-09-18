@@ -64,12 +64,29 @@ export default async function handler(req, res) {
     // Get request status including response payload
     const { data: request, error } = await supabase
       .from('llm_requests')
-      .select('request_id, status, created_at, processing_started_at, completed_at, error_message, response_payload')
+      .select('request_id, status, created_at, processing_started_at, completed_at, error_message, response_payload, fetch_count')
       .eq('request_id', requestId)
       .single();
 
     if (error || !request) {
       return res.status(404).json({ error: 'Request not found' });
+    }
+
+    // TRACK THE FETCH - Update fetch tracking
+    const currentFetchCount = request.fetch_count || 0;
+    const { error: trackingError } = await supabase
+      .from('llm_requests')
+      .update({ 
+        fetched_at: new Date().toISOString(),
+        fetch_count: currentFetchCount + 1
+      })
+      .eq('request_id', requestId);
+
+    if (trackingError) {
+      console.warn('Failed to track fetch:', trackingError);
+      // Don't fail the request, just log the warning
+    } else {
+      console.log(`Tracked fetch #${currentFetchCount + 1} for request: ${requestId}`);
     }
 
     // Get webhook logs for this request
@@ -95,6 +112,7 @@ export default async function handler(req, res) {
       completedAt: request.completed_at,
       processingTimeSeconds,
       errorMessage: request.error_message,
+      fetchCount: currentFetchCount + 1, // Include updated fetch count
       webhookLogs: webhookLogs || []
     };
 
