@@ -39,41 +39,54 @@ export const config = {
 // Simple in-memory tracking of recent webhook sends
 let recentWebhooks = [];
 
-async function sendWebhookWithRateLimit(webhookUrl, payload, token) {
-  // Clean old entries (older than 60 seconds)
-  const now = Date.now();
-  recentWebhooks = recentWebhooks.filter(time => now - time < 60000);
+// ENHANCED VERSION - keeps rate limiting + adds retries
+async function sendWebhookWithRateLimitAndRetry(webhookUrl, payload, token, maxRetries = 3) {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      // KEEP EXISTING RATE LIMITING LOGIC
+      const now = Date.now();
+      recentWebhooks = recentWebhooks.filter(time => now - time < 60000);
+      
+      const webhooksInLast10Seconds = recentWebhooks.filter(time => now - time < 10000);
+      if (webhooksInLast10Seconds.length >= 1) {
+        const lastWebhook = Math.max(...recentWebhooks);
+        const waitTime = 10000 - (now - lastWebhook);
+        if (waitTime > 0) {
+          console.log(`Rate limiting: waiting ${waitTime}ms before attempt ${attempt}`);
+          await new Promise(resolve => setTimeout(resolve, waitTime));
+        }
+      }
+      
+      recentWebhooks.push(Date.now());
 
-  // Check if we need to slow down
-  const webhooksInLast10Seconds = recentWebhooks.filter(time => now - time < 10000);
+      // ATTEMPT WEBHOOK WITH LONGER TIMEOUT
+      await fetch(webhookUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'User-Agent': 'Claude-Async/1.0'
+        },
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(15000) // INCREASED FROM 5000
+      });
 
-  if (webhooksInLast10Seconds.length >= 1) {
-    // Wait until 10 seconds have passed since the last webhook
-    const lastWebhook = Math.max(...recentWebhooks);
-    const waitTime = 10000 - (now - lastWebhook);
+      console.log(`Webhook delivered successfully on attempt ${attempt}`);
+      return; // Success
 
-    if (waitTime > 0) {
-      console.log(`Rate limiting: waiting ${waitTime}ms before sending webhook`);
-      await new Promise(resolve => setTimeout(resolve, waitTime));
+    } catch (error) {
+      console.log(`Webhook attempt ${attempt} failed: ${error.message}`);
+      
+      if (attempt === maxRetries) {
+        throw error; // Final attempt failed
+      }
+      
+      // Exponential backoff for retries (but not for rate limiting)
+      const backoffMs = Math.pow(2, attempt) * 1000;
+      console.log(`Retrying in ${backoffMs}ms...`);
+      await new Promise(resolve => setTimeout(resolve, backoffMs));
     }
   }
-
-  // Record this webhook send
-  recentWebhooks.push(Date.now());
-
-  // Send the webhook
-  await fetch(webhookUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-      'User-Agent': 'Claude-Async/1.0'
-    },
-    body: JSON.stringify(payload),
-    signal: AbortSignal.timeout(5000)
-  });
-
-  console.log(`Webhook delivered with rate limiting`);
 }
 
 export default async function handler(req, res) {
@@ -147,7 +160,7 @@ export default async function handler(req, res) {
 
     // Rate-limited webhook delivery
     try {
-      await sendWebhookWithRateLimit(
+      await sendWebhookWithRateLimitAndRetry(
         request.coda_webhook_url,
         {
           requestId: requestId,
