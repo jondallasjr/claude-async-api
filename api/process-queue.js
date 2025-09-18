@@ -8,6 +8,13 @@ MINIMAL PROCESSING APPROACH:
 - Truncate any string field to 45k characters (Coda limits)
 - Add cost calculation and basic metadata
 - Let Coda formulas handle parsing
+
+WEBHOOK RELIABILITY SYSTEM:
+- Rate limiting: Max 1 webhook per 10 seconds to prevent Coda queue overload
+- In-memory tracking: Cleans webhook history every 60 seconds
+- Monitoring: webhook-monitor.js retries unfetched webhooks after 2+ minutes
+- Fetch tracking: request-status.js records when users retrieve responses
+- Combined approach prevents bursts + recovers from any dropped webhooks
 */
 
 import { createClient } from '@supabase/supabase-js';
@@ -28,6 +35,46 @@ const supabase = createClient(
 export const config = {
   maxDuration: 800, // 13+ minutes
 };
+
+// Simple in-memory tracking of recent webhook sends
+let recentWebhooks = [];
+
+async function sendWebhookWithRateLimit(webhookUrl, payload, token) {
+  // Clean old entries (older than 60 seconds)
+  const now = Date.now();
+  recentWebhooks = recentWebhooks.filter(time => now - time < 60000);
+
+  // Check if we need to slow down
+  const webhooksInLast10Seconds = recentWebhooks.filter(time => now - time < 10000);
+
+  if (webhooksInLast10Seconds.length >= 1) {
+    // Wait until 10 seconds have passed since the last webhook
+    const lastWebhook = Math.max(...recentWebhooks);
+    const waitTime = 10000 - (now - lastWebhook);
+
+    if (waitTime > 0) {
+      console.log(`Rate limiting: waiting ${waitTime}ms before sending webhook`);
+      await new Promise(resolve => setTimeout(resolve, waitTime));
+    }
+  }
+
+  // Record this webhook send
+  recentWebhooks.push(Date.now());
+
+  // Send the webhook
+  await fetch(webhookUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+      'User-Agent': 'Claude-Async/1.0'
+    },
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(5000)
+  });
+
+  console.log(`Webhook delivered with rate limiting`);
+}
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -98,22 +145,16 @@ export default async function handler(req, res) {
       throw new Error(`Database update failed: ${updateError.message}`);
     }
 
-    // Direct webhook delivery
+    // Rate-limited webhook delivery
     try {
-      await fetch(request.coda_webhook_url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${request.coda_api_token}`,
-          'User-Agent': 'Claude-Async/1.0'
-        },
-        body: JSON.stringify({
+      await sendWebhookWithRateLimit(
+        request.coda_webhook_url,
+        {
           requestId: requestId,
           status: 'completed'
-        }),
-        signal: AbortSignal.timeout(5000)
-      });
-      console.log(`Webhook delivered for ${requestId}`);
+        },
+        request.coda_api_token
+      );
     } catch (webhookError) {
       console.log(`Webhook error: ${webhookError.message}`);
     }
@@ -154,7 +195,7 @@ function cleanResponse(obj) {
     }
     cleaned[key] = cleanResponse(value);
   }
-  
+
   return cleaned;
 }
 
@@ -210,7 +251,7 @@ function processResponseMinimal(claudeResponse, requestPayload) {
 
 async function callClaudeAPI(payload) {
   const { claudeRequest } = payload;
-  
+
   if (!claudeRequest) {
     throw new Error('No claudeRequest found in payload');
   }
@@ -239,7 +280,7 @@ async function callClaudeAPI(payload) {
   }
 
   const responseData = await response.json();
-  
+
   if (!responseData.content) {
     throw new Error('Invalid Claude response: missing content field');
   }
