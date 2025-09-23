@@ -46,7 +46,7 @@ async function sendWebhookWithRateLimitAndRetry(webhookUrl, payload, token, maxR
       // KEEP EXISTING RATE LIMITING LOGIC
       const now = Date.now();
       recentWebhooks = recentWebhooks.filter(time => now - time < 60000);
-      
+
       const webhooksInLast10Seconds = recentWebhooks.filter(time => now - time < 10000);
       if (webhooksInLast10Seconds.length >= 1) {
         const lastWebhook = Math.max(...recentWebhooks);
@@ -56,7 +56,7 @@ async function sendWebhookWithRateLimitAndRetry(webhookUrl, payload, token, maxR
           await new Promise(resolve => setTimeout(resolve, waitTime));
         }
       }
-      
+
       recentWebhooks.push(Date.now());
 
       // ATTEMPT WEBHOOK WITH LONGER TIMEOUT
@@ -76,11 +76,11 @@ async function sendWebhookWithRateLimitAndRetry(webhookUrl, payload, token, maxR
 
     } catch (error) {
       console.log(`Webhook attempt ${attempt} failed: ${error.message}`);
-      
+
       if (attempt === maxRetries) {
         throw error; // Final attempt failed
       }
-      
+
       // Exponential backoff for retries (but not for rate limiting)
       const backoffMs = Math.pow(2, attempt) * 1000;
       console.log(`Retrying in ${backoffMs}ms...`);
@@ -216,16 +216,16 @@ function cleanResponse(obj) {
 function extractAndFormatCitations(claudeResponse) {
   const citationRegistry = new Map();
   let citationCounter = 1;
-  
+
   // Walk through content blocks and extract citations
   function collectCitations(obj) {
     if (obj === null || typeof obj !== 'object') return;
-    
+
     if (Array.isArray(obj)) {
       obj.forEach(collectCitations);
       return;
     }
-    
+
     // Handle text blocks with citations array
     if (obj.type === 'text' && obj.citations && Array.isArray(obj.citations)) {
       obj.citations.forEach(citation => {
@@ -239,29 +239,29 @@ function extractAndFormatCitations(claudeResponse) {
         }
       });
     }
-    
+
     // Recursively process nested objects
     Object.values(obj).forEach(collectCitations);
   }
-  
+
   // Collect all citations
   collectCitations(claudeResponse);
-  
+
   return citationRegistry;
 }
 
 function addCitationFootnotes(content, citationRegistry) {
   if (citationRegistry.size === 0) return content;
-  
+
   // Build footnotes section
   const citations = Array.from(citationRegistry.values())
     .sort((a, b) => a.number - b.number);
-  
+
   let footnotes = '\n\n---\n**Sources:**\n\n';
   citations.forEach(citation => {
     footnotes += `[${citation.number}] [${citation.title}](${citation.url})\n`;
   });
-  
+
   return content + footnotes;
 }
 
@@ -270,23 +270,23 @@ function processContentWithCitations(contentArray, citationRegistry) {
     if (block.type === 'text' && block.citations && Array.isArray(block.citations)) {
       // Add citation markers to text
       let text = block.text || '';
-      
+
       const citationNumbers = block.citations
         .filter(c => c.url && citationRegistry.has(c.url))
         .map(c => citationRegistry.get(c.url).number)
         .sort((a, b) => a - b);
-      
+
       if (citationNumbers.length > 0) {
         const markers = citationNumbers.map(n => `[${n}]`).join('');
         text += ` ${markers}`;
       }
-      
+
       return {
         type: 'text',
         text: text
       };
     }
-    
+
     // Return other blocks unchanged
     return block;
   });
@@ -296,31 +296,29 @@ function processContentWithCitations(contentArray, citationRegistry) {
 function processResponseMinimal(claudeResponse, requestPayload) {
   // Clean the response (remove signatures, encrypted content)
   let cleaned = cleanResponse(claudeResponse);
-  
+
   // Check if web search was used (citations present)
-  const hasWebSearch = requestPayload.claudeRequest?.tools?.some(tool => 
+  const hasWebSearch = requestPayload.claudeRequest?.tools?.some(tool =>
     tool.type === 'web_search_20250305' || tool.name === 'web_search'
   );
-  
+
   // Process citations if web search was used
   if (hasWebSearch && cleaned.content) {
     console.log('Web search detected, processing citations...');
-    
+
     // Extract citation registry
     const citationRegistry = extractAndFormatCitations(cleaned);
-    
+
     if (citationRegistry.size > 0) {
       console.log(`Found ${citationRegistry.size} unique citations`);
-      
+
       // Process content blocks to add citation markers
       cleaned.content = processContentWithCitations(cleaned.content, citationRegistry);
-      
-      // Add footnotes to the main text content
-      const mainTextBlock = cleaned.content.find(block => block.type === 'text');
-      if (mainTextBlock) {
-        mainTextBlock.text = addCitationFootnotes(mainTextBlock.text, citationRegistry);
-      }
-      
+
+      // Add footnotes as a SEPARATE final text block instead of modifying existing blocks
+      const footnotes = buildFootnotesBlock(citationRegistry);
+      cleaned.content.push(footnotes);
+
       // Store citation metadata
       cleaned._citationInfo = {
         totalCitations: citationRegistry.size,
@@ -370,6 +368,23 @@ function processResponseMinimal(claudeResponse, requestPayload) {
   cleaned.completedAt = new Date().toISOString();
 
   return cleaned;
+}
+
+function buildFootnotesBlock(citationRegistry) {
+  if (citationRegistry.size === 0) return null;
+  
+  const citations = Array.from(citationRegistry.values())
+    .sort((a, b) => a.number - b.number);
+  
+  let footnotes = '\n\n---\n**Sources:**\n\n';
+  citations.forEach(citation => {
+    footnotes += `[${citation.number}] [${citation.title}](${citation.url})\n`;
+  });
+  
+  return {
+    type: 'text',
+    text: footnotes
+  };
 }
 
 async function callClaudeAPI(payload) {
