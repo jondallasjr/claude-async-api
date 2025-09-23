@@ -212,23 +212,133 @@ function cleanResponse(obj) {
   return cleaned;
 }
 
-// Minimal response processing
+// Extract and format citations from Claude's response
+function extractAndFormatCitations(claudeResponse) {
+  const citationRegistry = new Map();
+  let citationCounter = 1;
+  
+  // Walk through content blocks and extract citations
+  function collectCitations(obj) {
+    if (obj === null || typeof obj !== 'object') return;
+    
+    if (Array.isArray(obj)) {
+      obj.forEach(collectCitations);
+      return;
+    }
+    
+    // Handle text blocks with citations array
+    if (obj.type === 'text' && obj.citations && Array.isArray(obj.citations)) {
+      obj.citations.forEach(citation => {
+        if (citation.url && !citationRegistry.has(citation.url)) {
+          citationRegistry.set(citation.url, {
+            number: citationCounter++,
+            url: citation.url,
+            title: citation.title || 'Unknown Source',
+            cited_text: citation.cited_text || ''
+          });
+        }
+      });
+    }
+    
+    // Recursively process nested objects
+    Object.values(obj).forEach(collectCitations);
+  }
+  
+  // Collect all citations
+  collectCitations(claudeResponse);
+  
+  return citationRegistry;
+}
+
+function addCitationFootnotes(content, citationRegistry) {
+  if (citationRegistry.size === 0) return content;
+  
+  // Build footnotes section
+  const citations = Array.from(citationRegistry.values())
+    .sort((a, b) => a.number - b.number);
+  
+  let footnotes = '\n\n---\n**Sources:**\n\n';
+  citations.forEach(citation => {
+    footnotes += `[${citation.number}] [${citation.title}](${citation.url})\n`;
+  });
+  
+  return content + footnotes;
+}
+
+function processContentWithCitations(contentArray, citationRegistry) {
+  return contentArray.map(block => {
+    if (block.type === 'text' && block.citations && Array.isArray(block.citations)) {
+      // Add citation markers to text
+      let text = block.text || '';
+      
+      const citationNumbers = block.citations
+        .filter(c => c.url && citationRegistry.has(c.url))
+        .map(c => citationRegistry.get(c.url).number)
+        .sort((a, b) => a - b);
+      
+      if (citationNumbers.length > 0) {
+        const markers = citationNumbers.map(n => `[${n}]`).join('');
+        text += ` ${markers}`;
+      }
+      
+      return {
+        type: 'text',
+        text: text
+      };
+    }
+    
+    // Return other blocks unchanged
+    return block;
+  });
+}
+
+// Enhanced minimal response processing with optional citation handling
 function processResponseMinimal(claudeResponse, requestPayload) {
-  // Clean the response (remove signatures, truncate strings)
-  const cleaned = cleanResponse(claudeResponse);
+  // Clean the response (remove signatures, encrypted content)
+  let cleaned = cleanResponse(claudeResponse);
+  
+  // Check if web search was used (citations present)
+  const hasWebSearch = requestPayload.claudeRequest?.tools?.some(tool => 
+    tool.type === 'web_search_20250305' || tool.name === 'web_search'
+  );
+  
+  // Process citations if web search was used
+  if (hasWebSearch && cleaned.content) {
+    console.log('Web search detected, processing citations...');
+    
+    // Extract citation registry
+    const citationRegistry = extractAndFormatCitations(cleaned);
+    
+    if (citationRegistry.size > 0) {
+      console.log(`Found ${citationRegistry.size} unique citations`);
+      
+      // Process content blocks to add citation markers
+      cleaned.content = processContentWithCitations(cleaned.content, citationRegistry);
+      
+      // Add footnotes to the main text content
+      const mainTextBlock = cleaned.content.find(block => block.type === 'text');
+      if (mainTextBlock) {
+        mainTextBlock.text = addCitationFootnotes(mainTextBlock.text, citationRegistry);
+      }
+      
+      // Store citation metadata
+      cleaned._citationInfo = {
+        totalCitations: citationRegistry.size,
+        citationUrls: Array.from(citationRegistry.values()).map(c => c.url)
+      };
+    } else {
+      console.log('No citations found in web search response');
+    }
+  }
 
   // Handle JSON content extraction if requested
   if (requestPayload.responseOptions?.jsonContent) {
-    // Find the main text content
     const textContent = cleaned.content?.find(item => item.type === 'text');
     if (textContent?.text) {
-      // Extract just the JSON portion using regex
       const jsonMatch = textContent.text.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         try {
-          // Validate it's actually JSON and clean it
           JSON.parse(jsonMatch[0]);
-          // Replace the mixed text with clean JSON
           textContent.text = jsonMatch[0];
           console.log('✅ Extracted clean JSON from mixed content');
         } catch (e) {
