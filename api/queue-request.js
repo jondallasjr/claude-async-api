@@ -75,16 +75,10 @@ const supabase = createClient(
 );
 
 export default async function handler(req, res) {
-  // debug logging
-  console.log('Raw request body:', req.body);
-  console.log('Request headers:', req.headers);
-  console.log('Request method:', req.method);
-
   // Enable CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Claude-API-Key');
 
   if (req.method === 'OPTIONS') {
     res.status(200).end();
@@ -96,9 +90,37 @@ export default async function handler(req, res) {
   }
 
   try {
+    // Extract Claude API key from header (Coda replaced the placeholder)
+    const claudeApiKey = req.headers['x-claude-api-key'];
+    
+    // Validate API key presence
+    if (!claudeApiKey) {
+      console.error('Missing Claude API key in request headers');
+      return res.status(400).json({
+        error: 'Missing Claude API key. Please reconnect your Pack authentication and ensure your API key is configured.'
+      });
+    }
+
+    // Validate API key format (Claude keys start with sk-ant- and are ~108 chars)
+    if (!claudeApiKey.startsWith('sk-ant-')) {
+      console.error(`Invalid API key format: ${claudeApiKey.substring(0, 10)}...`);
+      return res.status(400).json({
+        error: 'Invalid Claude API key format. Keys should start with "sk-ant-". Please reconnect with a valid key.'
+      });
+    }
+
+    if (claudeApiKey.length < 50) {
+      console.error(`API key too short: ${claudeApiKey.length} characters`);
+      return res.status(400).json({
+        error: `API key appears truncated (${claudeApiKey.length} chars). Expected ~108 characters. Please reconnect your Pack authentication.`
+      });
+    }
+
+    console.log(`✅ Valid API key received (length: ${claudeApiKey.length})`);
+
     const { requestId, codaWebhookUrl, codaApiToken } = req.body;
 
-    // Only validate requestId (webhook params are optional now)
+    // Validate requestId
     if (!requestId) {
       return res.status(400).json({
         error: 'Missing required field: requestId'
@@ -108,13 +130,17 @@ export default async function handler(req, res) {
     console.log(`Queueing request ${requestId}${codaWebhookUrl ? ' with webhook' : ' (no webhook)'}`);
 
     // Store the complete request payload in Supabase
+    // Add the Claude API key to the payload for process-queue to use
     const { error } = await supabase
       .from('llm_requests')
       .insert({
         request_id: requestId,
-        request_payload: req.body,
-        coda_webhook_url: codaWebhookUrl || null,  // ✓ Store null if not provided
-        coda_api_token: codaApiToken || null,      // ✓ Store null if not provided
+        request_payload: {
+          ...req.body,
+          userApiKey: claudeApiKey  // ✅ Add the validated key to payload
+        },
+        coda_webhook_url: codaWebhookUrl || null,
+        coda_api_token: codaApiToken || null,
         status: 'queued'
       });
 
@@ -123,13 +149,17 @@ export default async function handler(req, res) {
       throw error;
     }
 
-    // Return immediately - don't wait for Claude processing
+    console.log(`✅ Request ${requestId} queued successfully`);
+
+    // Return immediately - processing happens in background via pg_net trigger
     res.status(200).json({
       success: true,
       requestId,
       message: 'Request queued and processing started in background',
       status: 'queued',
-      note: 'Response will be delivered via webhook when processing completes'
+      note: codaWebhookUrl 
+        ? 'Response will be delivered via webhook when processing completes'
+        : 'Use checkRequest(requestId) to poll for results'
     });
 
   } catch (error) {
