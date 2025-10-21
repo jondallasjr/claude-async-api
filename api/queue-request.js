@@ -98,13 +98,14 @@ export default async function handler(req, res) {
   try {
     const { requestId, codaWebhookUrl, codaApiToken } = req.body;
 
-    if (!requestId || !codaWebhookUrl || !codaApiToken) {
+    // Only validate requestId (webhook params are optional now)
+    if (!requestId) {
       return res.status(400).json({
-        error: 'Missing required fields: requestId, codaWebhookUrl, codaApiToken'
+        error: 'Missing required field: requestId'
       });
     }
 
-    console.log(`Queueing request ${requestId} (with cost calculation)`);
+    console.log(`Queueing request ${requestId}${codaWebhookUrl ? ' with webhook' : ' (no webhook)'}`);
 
     // Store the complete request payload in Supabase
     const { error } = await supabase
@@ -112,8 +113,8 @@ export default async function handler(req, res) {
       .insert({
         request_id: requestId,
         request_payload: req.body,
-        coda_webhook_url: codaWebhookUrl,
-        coda_api_token: codaApiToken,
+        coda_webhook_url: codaWebhookUrl || null,  // ✓ Store null if not provided
+        coda_api_token: codaApiToken || null,      // ✓ Store null if not provided
         status: 'queued'
       });
 

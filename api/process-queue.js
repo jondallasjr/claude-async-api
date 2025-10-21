@@ -158,18 +158,22 @@ export default async function handler(req, res) {
       throw new Error(`Database update failed: ${updateError.message}`);
     }
 
-    // Rate-limited webhook delivery
-    try {
-      await sendWebhookWithRateLimitAndRetry(
-        request.coda_webhook_url,
-        {
-          requestId: requestId,
-          status: 'completed'
-        },
-        request.coda_api_token
-      );
-    } catch (webhookError) {
-      console.log(`Webhook error: ${webhookError.message}`);
+    // Rate-limited webhook delivery (ONLY if webhook URL provided)
+    if (request.coda_webhook_url && request.coda_api_token) {
+      try {
+        await sendWebhookWithRateLimitAndRetry(
+          request.coda_webhook_url,
+          {
+            requestId: requestId,
+            status: 'completed'
+          },
+          request.coda_api_token
+        );
+      } catch (webhookError) {
+        console.log(`Webhook error: ${webhookError.message}`);
+      }
+    } else {
+      console.log(`No webhook configured for ${requestId}, skipping webhook delivery`);
     }
 
     res.status(200).json({ success: true });
@@ -372,15 +376,15 @@ function processResponseMinimal(claudeResponse, requestPayload) {
 
 function buildFootnotesBlock(citationRegistry) {
   if (citationRegistry.size === 0) return null;
-  
+
   const citations = Array.from(citationRegistry.values())
     .sort((a, b) => a.number - b.number);
-  
+
   let footnotes = '\n\n---\n**Sources:**\n\n';
   citations.forEach(citation => {
     footnotes += `[${citation.number}] [${citation.title}](${citation.url})\n`;
   });
-  
+
   return {
     type: 'text',
     text: footnotes
@@ -388,24 +392,34 @@ function buildFootnotesBlock(citationRegistry) {
 }
 
 async function callClaudeAPI(payload) {
-  const { claudeRequest } = payload;
+  const { claudeRequest, userApiKey } = payload;
 
   if (!claudeRequest) {
     throw new Error('No claudeRequest found in payload');
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    throw new Error('No API key configured');
+  // Only use user's API key (no fallback to system key)
+  if (!userApiKey) {
+    throw new Error('No user API key found in payload. User must authenticate with their Claude API key.');
   }
 
-  console.log(`Calling Claude with model: ${claudeRequest.model}`);
+  // Validate API key format (Claude keys are typically 108 characters starting with sk-ant-api03-)
+  if (!userApiKey.startsWith('sk-ant-')) {
+    throw new Error(`Invalid API key format. Expected Claude API key starting with 'sk-ant-'. If you're seeing this, check your API key or use the claudeApiKeyOverride parameter.`);
+  }
+  
+  // Separate warning for suspicious length
+  if (userApiKey.length < 50) {
+    console.warn(`⚠️ API key seems short (${userApiKey.length} chars). Normal Claude keys are 100+ characters. Possible truncation.`);
+  }
+
+  console.log(`Calling Claude with model: ${claudeRequest.model} (API key length: ${userApiKey.length})`);
 
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'x-api-key': apiKey,
+      'x-api-key': userApiKey,
       'anthropic-version': '2023-06-01'
     },
     body: JSON.stringify(claudeRequest),
