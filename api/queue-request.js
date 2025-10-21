@@ -67,6 +67,10 @@ FLOW:
 5. Webhook delivers result when ready
 */
 
+// =================================================================
+// FIXED api/queue-request.js - API Key Extraction
+// =================================================================
+
 import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(
@@ -90,12 +94,14 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Extract Claude API key from header (Coda replaced the placeholder)
-    const claudeApiKey = req.headers['x-claude-api-key'];
+    // ✅ FIX: Check BOTH body and headers for API key
+    // First priority: body (from Coda Pack)
+    // Second priority: headers (for direct API calls)
+    let claudeApiKey = req.body?.userApiKey || req.headers['x-claude-api-key'];
     
     // Validate API key presence
     if (!claudeApiKey) {
-      console.error('Missing Claude API key in request headers');
+      console.error('Missing Claude API key in request body or headers');
       return res.status(400).json({
         error: 'Missing Claude API key. Please reconnect your Pack authentication and ensure your API key is configured.'
       });
@@ -130,15 +136,12 @@ export default async function handler(req, res) {
     console.log(`Queueing request ${requestId}${codaWebhookUrl ? ' with webhook' : ' (no webhook)'}`);
 
     // Store the complete request payload in Supabase
-    // Add the Claude API key to the payload for process-queue to use
+    // The userApiKey is already in the payload from the Pack
     const { error } = await supabase
       .from('llm_requests')
       .insert({
         request_id: requestId,
-        request_payload: {
-          ...req.body,
-          userApiKey: claudeApiKey  // ✅ Add the validated key to payload
-        },
+        request_payload: req.body,  // Store entire payload as-is (includes userApiKey)
         coda_webhook_url: codaWebhookUrl || null,
         coda_api_token: codaApiToken || null,
         status: 'queued'
